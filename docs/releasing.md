@@ -29,6 +29,7 @@
    脚本依次归档、导出、上传。签名用 Xcode 的自动签名，证书和描述文件由 API 密钥按需生成。
 3. 5 到 15 分钟后，构建出现在 App Store Connect › TestFlight。团队里的内部测试员不用审核就能安装；外部测试员要先通过 Beta 版审核。
 4. 在 `CHANGELOG.md` 里把「未发布」改成版本号和日期，打上标签：`git tag v<版本号> && git push --tags`。
+5. 在 GitHub 上建 Release，说明就是 `CHANGELOG.md` 里这个版本的那一节：`gh release create v<版本号> --verify-tag --title <版本号> --notes-file <这一节的内容>`。
 
 ## 说明
 
