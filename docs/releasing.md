@@ -6,13 +6,13 @@
 
 1. **接受协议**：团队的 Account Holder 在 [Apple Developer](https://developer.apple.com/account) 接受最新的 Program License Agreement。没接受时，API 会报 `PLA_NOT_ACCEPTED`，注册 Bundle ID、生成描述文件都会失败。
 2. **API 密钥**：放在 `~/.appstoreconnect/private_keys/AuthKey_<密钥 ID>.p8`，角色要能管理证书和描述文件（Admin 或 App Manager）。密钥 ID 和 Issuer ID 通过环境变量传给脚本，不要写进仓库。
-3. **Bundle ID**：`com.kadaliao.kaixinguo`。第一次归档时 Xcode 会用 API 密钥自动注册。
-4. **App 记录**：只能在网页上建（API 做不到）。在 [App Store Connect](https://appstoreconnect.apple.com/apps) › 我的 App › ＋ › 新建 App：
+3. **Bundle ID**：`com.kadaliao.kaixinguo`，已经注册。
+4. **App 记录**：已经建好，App Store Connect 里的名称是「开心果短剧」（「开心果」已被别的 App 占用），App ID `6831169843`。内部测试组「内部测试」会自动拿到每个新构建。要重建的话，只能在网页上建（API 做不到）：[App Store Connect](https://appstoreconnect.apple.com/apps) › 我的 App › ＋ › 新建 App：
 
    | 字段 | 填写 |
    | --- | --- |
    | 平台 | iOS |
-   | 名称 | App Store 上的名字，全局唯一；和主屏幕上显示的「开心果」可以不同 |
+   | 名称 | 开心果短剧（全局唯一，可以和主屏幕上显示的「开心果」不同） |
    | 主要语言 | 简体中文 |
    | 套装 ID | com.kadaliao.kaixinguo |
    | SKU | kaixinguo-ios |
