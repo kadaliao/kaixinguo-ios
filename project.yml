@@ -1,0 +1,76 @@
+# The Xcode project is generated from this file: run `xcodegen` after
+# changing it, or after adding or removing files.
+name: Kaixinguo
+options:
+  bundleIdPrefix: com.kadaliao
+  deploymentTarget:
+    iOS: "18.0"
+  developmentLanguage: zh-Hans
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: HMDAVG9B8J
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+packages:
+  KaixinguoKit:
+    path: KaixinguoKit
+targets:
+  Kaixinguo:
+    type: application
+    platform: iOS
+    sources:
+      - path: Kaixinguo
+    dependencies:
+      - package: KaixinguoKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kadaliao.kaixinguo
+        PRODUCT_NAME: Kaixinguo
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Kaixinguo/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: 开心果
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.entertainment
+    info:
+      path: Kaixinguo/Info.plist
+      properties:
+        CFBundleDevelopmentRegion: zh-Hans
+        UIBackgroundModes: [audio]
+        CFBundleURLTypes:
+          - CFBundleURLName: com.kadaliao.kaixinguo
+            CFBundleURLSchemes: [kaixinguo]
+  KaixinguoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: KaixinguoUITests
+    dependencies:
+      - target: Kaixinguo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kadaliao.kaixinguo.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Kaixinguo
+schemes:
+  Kaixinguo:
+    build:
+      targets:
+        Kaixinguo: all
+    test:
+      targets:
+        - KaixinguoUITests
+    run:
+      config: Debug
+    archive:
+      config: Release
