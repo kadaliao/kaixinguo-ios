@@ -361,7 +361,8 @@ public final class Player {
     func record(_ sp: SeriesPage, _ n: Int, position: Double, duration: Double, finished: Bool) {
         guard let s = sp.series else { return }
         app.history.record(Watch(seriesID: sp.id, title: s.title, cover: s.coverUrl, episode: n, position: position,
-                                 duration: duration, total: sp.episodes.count, finished: finished))
+                                 duration: duration, total: sp.episodes.count, finished: finished,
+                                 watched: watchedEnough(position, duration, finished: finished) ? [n] : []))
     }
 
     #if os(iOS)
@@ -395,6 +396,12 @@ func bestStream(_ streams: [Openhongguo.Stream]) -> Openhongguo.Stream? {
     }
     return streams.filter { !$0.url.trimmingCharacters(in: .whitespaces).isEmpty }
         .max { (height($0), $0.bitrate) < (height($1), $1.bitrate) }
+}
+
+/// Whether an episode counts as watched: played to its end, or nine tenths
+/// of the way, since viewers often skip its last seconds for the next.
+func watchedEnough(_ position: Double, _ duration: Double, finished: Bool) -> Bool {
+    finished || (duration > 0 && position >= duration * 0.9)
 }
 
 /// Whether the model's CDN URLs expire within a minute.

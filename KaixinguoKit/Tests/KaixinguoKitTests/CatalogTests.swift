@@ -281,8 +281,30 @@ func numbersSeasons(input: [Season], want: String) {
     let h3 = History(dir: goDir)
     #expect(h3.list.count == 2)
     #expect(h3.get("7")?.position == 42.1)
+    #expect(h3.get("7")?.watched == [])
     let updated = try #require(h3.get("7")?.updated)
     #expect(abs(updated.timeIntervalSince1970 - 1_793_865_723.123) < 0.01)
+}
+
+/// The episodes watched add up as the viewer goes on, and a later record
+/// that doesn't mention them keeps them.
+@MainActor @Test func historyKeepsWatchedEpisodes() {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kxg-\(UUID().uuidString)")
+    let h = History(dir: dir)
+    h.record(Watch(seriesID: "1", episode: 3, finished: true, watched: [3]))
+    h.record(Watch(seriesID: "1", episode: 1, watched: [1]))
+    h.record(Watch(seriesID: "1", episode: 2, position: 5))
+    h.record(Watch(seriesID: "2", episode: 1))
+    h.record(Watch(seriesID: "1", episode: 3, watched: [3]))
+    #expect(h.get("1")?.watched == [1, 3])
+    #expect(h.get("2")?.watched == [])
+    h.flush()
+    #expect(History(dir: dir).get("1")?.watched == [1, 3])
+
+    #expect(watchedEnough(54, 60, finished: false))
+    #expect(!watchedEnough(53, 60, finished: false))
+    #expect(!watchedEnough(5, 0, finished: false)) // the length isn't known yet
+    #expect(watchedEnough(0, 0, finished: true))
 }
 
 /// A player waiting for a series that fails to load says why, rather than

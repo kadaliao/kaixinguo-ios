@@ -156,7 +156,7 @@ private struct SeriesBody: View {
     }
 
     private func episodes(wide: Bool) -> some View {
-        let cur = model.history.get(sp.id)?.episode ?? 0
+        let w = model.history.get(sp.id)
         return VStack(alignment: .leading, spacing: 14) {
             SeasonChips(sp: sp) { se in router.replaceTop(.series(se.seriesId)) }
                 .padding(.horizontal, wide ? -16 : -16)
@@ -171,7 +171,8 @@ private struct SeriesBody: View {
             } else if sp.episodes.isEmpty {
                 Text("暂时没有可看的剧集").font(.footnote).foregroundStyle(.secondary)
             } else {
-                EpisodeGrid(sp: sp, current: cur, minWidth: wide ? 56 : 50) { e in
+                EpisodeGrid(sp: sp, current: w?.episode ?? 0, watched: Set(w?.watched ?? []),
+                            minWidth: wide ? 56 : 50) { e in
                     model.player.play(sp.id, e.number)
                 }
             }
@@ -225,24 +226,29 @@ struct PartPicker: View {
 struct EpisodeGrid: View {
     let sp: SeriesPage
     let current: Int
+    var watched: Set<Int> = []
     var minWidth: CGFloat = 50
     let play: (Episode) -> Void
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: minWidth), spacing: 8)], spacing: 8) {
             ForEach(sp.partEpisodes, id: \.id) { e in
-                EpisodeChip(episode: e, current: e.number == current) { play(e) }
-                    .id(e.number)
+                EpisodeChip(episode: e, current: e.number == current, watched: watched.contains(e.number)) {
+                    play(e)
+                }
+                .id(e.number)
             }
         }
     }
 }
 
 /// EpisodeChip is an episode's number to tap, filled while it is the one
-/// the viewer is on; a lock for one that needs a login.
+/// the viewer is on, faded and checked once watched; a lock for one that
+/// needs a login.
 struct EpisodeChip: View {
     let episode: Episode
     let current: Bool
+    var watched = false
     let action: () -> Void
 
     var body: some View {
@@ -257,14 +263,23 @@ struct EpisodeChip: View {
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 40)
-            .foregroundStyle(current ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+            .foregroundStyle(current ? AnyShapeStyle(.white) : watched ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
             .background(current ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary.opacity(0.07)),
                         in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                if watched {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 8, weight: .heavy))
+                        .foregroundStyle(current ? AnyShapeStyle(.white) : AnyShapeStyle(.tint))
+                        .padding(5)
+                }
+            }
         }
         .buttonStyle(.plain)
         .disabled(!episode.playable)
         .opacity(episode.playable ? 1 : 0.45)
         .accessibilityLabel("第 \(episode.number) 集")
+        .accessibilityValue(watched ? "已看过" : "")
         .accessibilityHint(episode.playable ? "" : "这一集需要登录")
         .accessibilityAddTraits(current ? .isSelected : [])
     }

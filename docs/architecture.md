@@ -101,7 +101,7 @@ flowchart LR
 
 | 文件 | 内容 | 写入方 |
 | --- | --- | --- |
-| `Application Support/history.json` | 观看记录，最近的在前，最多 200 部 | `History` |
+| `Application Support/history.json` | 观看记录，最近的在前，最多 200 部；每部记着看到哪里和看完了哪几集 | `History` |
 | `Application Support/favorites.json` | 收藏，最近收藏的在前 | `Favorites` |
 | `Application Support/openhongguo/anonymous.json` | SDK 注册的匿名设备，不参与备份 | openhongguo |
 | `Caches/home.json` | 推荐页第一页 | `AppModel` |
@@ -115,6 +115,8 @@ flowchart LR
 - 退到后台时（`scenePhase == .background`）调用 `flush`，等最后一次写入落盘。
 
 字段一旦发布就要保持兼容：只能加字段，不能改名或删除，新字段解码时要有默认值。
+
+`history.json` 里的 `watched` 是 iOS 版加的字段：这一季看完的集号，从小到大。一集播完，或播过九成（常有人跳过最后几秒直接看下一集），就记进去；`History.record` 把新记录和旧记录的 `watched` 合并，所以每 3 秒一次的进度记录不会把它冲掉。macOS 版还不认这个字段，读到会忽略。
 
 ## 测试
 

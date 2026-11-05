@@ -241,7 +241,8 @@ struct EpisodePanel: View {
                 Divider().overlay(Color.white.opacity(0.06))
                 ScrollViewReader { proxy in
                     ScrollView {
-                        EpisodeGrid(sp: sp, current: player.number, minWidth: 46) { e in
+                        EpisodeGrid(sp: sp, current: player.number,
+                                    watched: Set(model.history.get(sp.id)?.watched ?? []), minWidth: 46) { e in
                             if e.number != player.number {
                                 player.play(sp.id, e.number)
                             }

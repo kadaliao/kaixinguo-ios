@@ -112,11 +112,14 @@ public struct Watch: Codable, Hashable, Identifiable, Sendable {
     public var total: Int
     public var finished: Bool
     public var updated: Date
+    /// The episodes watched to the end, or nearly, in order.
+    public var watched: [Int]
 
     public var id: String { seriesID }
 
     public init(seriesID: String, title: String = "", cover: String = "", episode: Int, position: Double = 0,
-                duration: Double = 0, total: Int = 0, finished: Bool = false, updated: Date = Date()) {
+                duration: Double = 0, total: Int = 0, finished: Bool = false, updated: Date = Date(),
+                watched: [Int] = []) {
         self.seriesID = seriesID
         self.title = title
         self.cover = cover
@@ -126,11 +129,12 @@ public struct Watch: Codable, Hashable, Identifiable, Sendable {
         self.total = total
         self.finished = finished
         self.updated = updated
+        self.watched = watched
     }
 
     enum CodingKeys: String, CodingKey {
         case seriesID = "series_id"
-        case title, cover, episode, position, duration, total, finished, updated
+        case title, cover, episode, position, duration, total, finished, updated, watched
     }
 
     public init(from decoder: Decoder) throws {
@@ -144,6 +148,7 @@ public struct Watch: Codable, Hashable, Identifiable, Sendable {
         total = try c.decodeIfPresent(Int.self, forKey: .total) ?? 0
         finished = try c.decodeIfPresent(Bool.self, forKey: .finished) ?? false
         updated = try c.decodeIfPresent(Date.self, forKey: .updated) ?? .distantPast
+        watched = try c.decodeIfPresent([Int].self, forKey: .watched) ?? []
     }
 }
 
@@ -165,10 +170,14 @@ public final class History {
         list.first { $0.seriesID == id }
     }
 
-    /// Moves w to the front.
+    /// Moves w to the front. The episodes watched before stay watched,
+    /// with w's own added.
     public func record(_ w: Watch) {
         var w = w
         w.updated = Date()
+        if let old = get(w.seriesID), !old.watched.isEmpty {
+            w.watched = Set(old.watched).union(w.watched).sorted()
+        }
         var next = [w]
         next += list.lazy.filter { $0.seriesID != w.seriesID }.prefix(Self.max - 1)
         list = next
