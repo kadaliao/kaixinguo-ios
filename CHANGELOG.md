@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+## [0.2.0] - 2026-11-05
+
 ### 新增
 
 - 看完的集在选集里打勾、数字变淡，剧集页和播放页的选集面板都有
@@ -35,5 +37,6 @@
 - AirPlay 只能屏幕镜像
 - 第一次启动要注册匿名设备，网络慢时列表可能要等十几秒才出来；之后启动会先显示缓存
 
-[未发布]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.1.0...HEAD
+[未发布]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kadaliao/kaixinguo-ios/releases/tag/v0.1.0
