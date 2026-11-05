@@ -231,12 +231,16 @@ public final class AppModel {
         return out
     }
 
-    /// Words people complete the prefix to, as they type a search.
+    /// Words people complete the prefix to, as they type a search. They
+    /// are the suggestions' text: a suggestion that leads straight to a
+    /// series has its ID for a keyword, and not every such ID is a series
+    /// the app can open, so the text is what gets searched.
     public func suggestions(_ prefix: String) async -> [String] {
         let p = prefix.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !p.isEmpty, let list = try? await catalog.suggest(p) else { return [] }
         var seen = Set<String>()
-        return list.map { $0.keyword.isEmpty ? $0.text : $0.keyword }.filter { !$0.isEmpty && seen.insert($0).inserted }
+        return list.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
     // MARK: - 热搜

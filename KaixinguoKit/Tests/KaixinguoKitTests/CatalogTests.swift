@@ -161,6 +161,20 @@ func numbersSeasons(input: [Season], want: String) {
     #expect(page.cards.isEmpty)
 }
 
+/// Suggestions show their text, not the series ID a suggestion that leads
+/// straight to a series carries as its keyword.
+@MainActor @Test func suggestionsAreText() async {
+    let (model, catalog) = testModel()
+    catalog.update {
+        $0.suggestions = [Suggestion(text: "持械入宋：第一季", keyword: "7671966197985856536", kind: 2),
+                          Suggestion(text: "总裁系列", keyword: "总裁系列", kind: 1),
+                          Suggestion(text: " 持械入宋：第一季 ", keyword: "1", kind: 2),
+                          Suggestion(text: "", keyword: "7666404568275635224", kind: 2)]
+    }
+    #expect(await model.suggestions(" 持械 ") == ["持械入宋：第一季", "总裁系列"])
+    #expect(await model.suggestions("  ").isEmpty)
+}
+
 /// A series' page loads its episodes, and its seasons, which every season's
 /// page then shares.
 @MainActor @Test func seriesAndSeasons() async {

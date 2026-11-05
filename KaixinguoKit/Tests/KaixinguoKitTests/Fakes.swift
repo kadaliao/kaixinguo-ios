@@ -13,6 +13,7 @@ final class FakeCatalog: Catalog {
         var albums: [String: Album] = [:]
         var search: @Sendable (String, SearchOptions) throws -> Page<SeriesSummary> = { _, _ in Page() }
         var batch: [String: Series] = [:]
+        var suggestions: [Suggestion] = []
         var calls: [String] = []
     }
 
@@ -34,7 +35,7 @@ final class FakeCatalog: Catalog {
         return try f(query, options)
     }
 
-    func suggest(_ prefix: String) async throws -> [Suggestion] { [] }
+    func suggest(_ prefix: String) async throws -> [Suggestion] { state.withLock { $0.suggestions } }
     func hotSearch() async throws -> HotSearch { HotSearch() }
     func newReleases(_ query: NewReleaseQuery) async throws -> NewReleasePage { NewReleasePage() }
 
