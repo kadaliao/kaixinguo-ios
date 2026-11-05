@@ -110,7 +110,7 @@ xcodebuild test -project Kaixinguo.xcodeproj -scheme Kaixinguo \
   -destination 'platform=iOS Simulator,name=iPhone Air'   # 界面冒烟测试，需要网络
 ```
 
-动手之前先读 [docs/architecture.md](docs/architecture.md) 和 [CONTRIBUTING.md](CONTRIBUTING.md)。
+动手之前先读 [docs/architecture.md](docs/architecture.md) 和 [CONTRIBUTING.md](CONTRIBUTING.md)。发到 TestFlight 的流程见 [docs/releasing.md](docs/releasing.md)。
 
 一句话概括实现：剧集是 CENC（AES-CTR）加密的 HEVC MP4，`KaixinguoKit/Sources/CENC` 按需原地解密任意字节区间，`StreamLoader` 作为 AVFoundation 的资源加载器，边从 CDN 下载边解密交给系统播放器，可以随意拖动进度；数据来自 openhongguo 的 Swift 包。
 

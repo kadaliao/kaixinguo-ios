@@ -46,6 +46,7 @@ targets:
       path: Kaixinguo/Info.plist
       properties:
         CFBundleDevelopmentRegion: zh-Hans
+        ITSAppUsesNonExemptEncryption: false
         UIBackgroundModes: [audio]
         CFBundleURLTypes:
           - CFBundleURLName: com.kadaliao.kaixinguo
