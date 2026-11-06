@@ -246,6 +246,49 @@ func numbersSeasons(input: [Season], want: String) {
     #expect(!model.player.isPresented)
 }
 
+/// Holding the video plays it at double speed until the finger lifts; a
+/// swipe down locks it on, and a later hold that swipes up goes back to the
+/// speed the viewer chose.
+@MainActor @Test func doubleSpeedWhileHeld() {
+    let (model, _) = testModel()
+    let p = model.player
+    p.av.defaultRate = 1.5 // from the speed menu
+    p.av.rate = 1.5
+
+    p.beginHold()
+    #expect(p.doubleSpeed == .held)
+    #expect(p.av.rate == 2)
+    #expect(p.av.defaultRate == 1.5)
+    p.endHold(swiped: false)
+    #expect(p.doubleSpeed == .off)
+    #expect(p.av.rate == 1.5)
+
+    p.beginHold()
+    p.endHold(swiped: true)
+    #expect(p.doubleSpeed == .locked)
+    #expect(p.av.rate == 2)
+    #expect(p.av.defaultRate == 2) // the next episode, and the menu, too
+
+    // Holding again only shows it; a swipe the wrong way changes nothing.
+    p.beginHold()
+    #expect(p.doubleSpeed == .locked)
+    p.endHold(swiped: false)
+    #expect(p.doubleSpeed == .locked)
+    #expect(p.av.rate == 2)
+
+    p.av.pause()
+    p.beginHold()
+    p.endHold(swiped: true)
+    #expect(p.doubleSpeed == .off)
+    #expect(p.av.defaultRate == 1.5)
+    #expect(p.av.rate == 0) // still paused
+
+    // 2× picked from the menu counts as locked.
+    p.av.defaultRate = 2
+    p.beginHold()
+    #expect(p.doubleSpeed == .locked)
+}
+
 /// What the viewer watched and saved survives a restart, in files the
 /// macOS app's Go code reads and writes too.
 @MainActor @Test func historyAndFavoritesPersist() throws {

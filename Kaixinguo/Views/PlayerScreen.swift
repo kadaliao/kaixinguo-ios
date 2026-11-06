@@ -53,6 +53,7 @@ struct PlayerScreen: View {
     private var video: some View {
         ZStack {
             PlayerControllerView(player: model.player)
+            SpeedHint()
             PlayerOverlay()
         }
     }
@@ -95,6 +96,78 @@ private struct PlayerOverlay: View {
             EmptyView()
         }
     }
+}
+
+/// SpeedHint shows a press and hold on the video at work: double speed, and
+/// which way to swipe to lock it on or turn it off; then, for a moment,
+/// what the swipe did.
+private struct SpeedHint: View {
+    @Environment(AppModel.self) private var model
+    private let hold = PlayerHost.shared.hold
+
+    var body: some View {
+        let player = model.player
+        let active = hold.active
+        VStack(spacing: 8) {
+            if active {
+                let locked = player.doubleSpeed == .locked
+                Label(locked ? "已锁定 2 倍速" : "2 倍速播放中", systemImage: locked ? "lock.fill" : "forward.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.black.opacity(0.6), in: Capsule())
+                swipe(locked: locked, base: player.baseRate)
+            } else if let done = hold.done {
+                Text(done)
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.black.opacity(0.6), in: Capsule())
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.top, 56) // under the player's own top controls
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .allowsHitTesting(false)
+        .animation(.easeOut(duration: 0.15), value: active)
+        .animation(.easeOut(duration: 0.15), value: hold.swiped)
+        .animation(.easeOut(duration: 0.25), value: hold.done)
+        .sensoryFeedback(.impact(weight: .medium), trigger: active) { _, on in on }
+        .sensoryFeedback(.selection, trigger: hold.swiped) { _, _ in active }
+        .task(id: hold.done) {
+            guard hold.done != nil else { return }
+            try? await Task.sleep(for: .seconds(2))
+            hold.done = nil
+        }
+    }
+
+    /// Which way to swipe, or, once swiped far enough, what letting go does.
+    private func swipe(locked: Bool, base: Float) -> some View {
+        let swiped = hold.swiped
+        let (icon, text) = switch (locked, swiped) {
+        case (false, false): ("chevron.down", "下滑锁定 2 倍速")
+        case (false, true): ("lock.fill", "松手锁定 2 倍速")
+        case (true, false): ("chevron.up", "上滑取消 2 倍速")
+        case (true, true): ("arrow.uturn.backward", "松手" + restoring(base))
+        }
+        return HStack(spacing: 6) {
+            Image(systemName: icon)
+                .symbolEffect(locked ? .bounce.up : .bounce.down, options: .repeat(.periodic(delay: 0.4)),
+                              isActive: !swiped)
+            Text(text)
+        }
+        .font(.footnote.weight(.medium))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .foregroundStyle(swiped ? .black : .white)
+        .background(swiped ? .white : .black.opacity(0.45), in: Capsule())
+    }
+}
+
+/// What going back from double speed says: to the speed the viewer chose.
+private func restoring(_ rate: Float) -> String {
+    rate == 1 ? "恢复正常速度" : "恢复 \(Double(rate).formatted()) 倍速"
 }
 
 private struct CloseButton: View {
@@ -282,13 +355,17 @@ private struct PlayerControllerView: UIViewControllerRepresentable {
 
 /// PlayerHost keeps the one player view controller there is, so picture
 /// in picture goes on when the player's screen closes, and comes back to
-/// the screen it left.
+/// the screen it left. It also watches for a press and hold on the video.
 @MainActor
-final class PlayerHost: NSObject, @MainActor AVPlayerViewControllerDelegate {
+final class PlayerHost: NSObject, @MainActor AVPlayerViewControllerDelegate, UIGestureRecognizerDelegate {
     static let shared = PlayerHost()
+    /// How far a held finger swipes to lock double speed on, or off.
+    private static let swipe: CGFloat = 40
 
+    let hold = SpeedHold()
     private var vc: AVPlayerViewController?
     private weak var player: Player?
+    private var holdFrom: CGFloat = 0 // where the held finger was when it began
 
     func controller(for player: Player) -> AVPlayerViewController {
         self.player = player
@@ -307,8 +384,56 @@ final class PlayerHost: NSObject, @MainActor AVPlayerViewControllerDelegate {
         vc.videoGravity = .resizeAspect
         vc.view.backgroundColor = .black
         vc.delegate = self
+        let press = UILongPressGestureRecognizer(target: self, action: #selector(pressed))
+        press.delegate = self
+        vc.view.addGestureRecognizer(press)
         self.vc = vc
         return vc
+    }
+
+    /// Plays at double speed while a finger holds the video; swiping down
+    /// locks it on, and swiping up in a later hold turns it off.
+    @objc private func pressed(_ g: UILongPressGestureRecognizer) {
+        guard let player else { return }
+        let y = g.location(in: g.view).y
+        switch g.state {
+        case .began:
+            holdFrom = y
+            player.beginHold()
+            hold.done = nil
+            hold.active = true
+        case .changed:
+            let dy = y - holdFrom
+            let swiped = player.doubleSpeed == .locked ? dy < -Self.swipe : dy > Self.swipe
+            if swiped != hold.swiped {
+                hold.swiped = swiped
+            }
+        case .ended, .cancelled:
+            let was = player.doubleSpeed
+            player.endHold(swiped: g.state == .ended && hold.swiped)
+            hold.active = false
+            hold.swiped = false
+            switch (was, player.doubleSpeed) {
+            case (.held, .locked): hold.done = "已锁定 2 倍速，长按上滑可取消"
+            case (.locked, .off): hold.done = "已" + restoring(player.baseRate)
+            default: break
+            }
+        default:
+            break
+        }
+    }
+
+    /// Leaves the player's own controls, its scrubber and buttons, to
+    /// themselves.
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        var view = touch.view
+        while let v = view, v !== g.view {
+            if v is UIControl {
+                return false
+            }
+            view = v.superview
+        }
+        return true
     }
 
     func playerViewControllerWillStartPictureInPicture(_ vc: AVPlayerViewController) {
@@ -326,4 +451,16 @@ final class PlayerHost: NSObject, @MainActor AVPlayerViewControllerDelegate {
         // The screen slides up first; then the video flies back into it.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { done(true) }
     }
+}
+
+/// SpeedHold is a press and hold on the video as it goes, and what the last
+/// one did, for SpeedHint to show.
+@MainActor @Observable
+final class SpeedHold {
+    var active = false
+    /// Whether the finger has swiped far enough that letting go flips the
+    /// lock.
+    var swiped = false
+    /// What the last hold changed, said for a moment after.
+    var done: String?
 }

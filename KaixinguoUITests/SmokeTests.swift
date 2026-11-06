@@ -42,6 +42,16 @@ final class SmokeTests: XCTestCase {
         shot.lifetime = .keepAlways
         add(shot)
 
+        // Holding the video plays it at double speed; swiping down locks
+        // that on, and holding again and swiping up turns it off.
+        // Left of center, to miss the episode panel on iPad.
+        let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.3))
+        let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.45))
+        top.press(forDuration: 1.5, thenDragTo: bottom, withVelocity: .slow, thenHoldForDuration: 1.5)
+        XCTAssertTrue(app.staticTexts["已锁定 2 倍速，长按上滑可取消"].waitForExistence(timeout: 2), "double speed did not lock")
+        bottom.press(forDuration: 1.5, thenDragTo: top, withVelocity: .slow, thenHoldForDuration: 1.5)
+        XCTAssertTrue(app.staticTexts["已恢复正常速度"].waitForExistence(timeout: 2), "double speed did not turn off")
+
         // Leaving the player goes back to the series, which goes on from
         // the episode watched.
         app.buttons["退出播放"].tap()

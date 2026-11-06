@@ -30,6 +30,10 @@ public final class Player {
     /// Whether picture in picture shows the video, so leaving the screen
     /// keeps it playing.
     public var inPictureInPicture = false
+    /// What a press and hold on the video has done to its speed.
+    public private(set) var doubleSpeed: DoubleSpeed = .off
+    /// The speed the viewer chose, which double speed goes back to.
+    public private(set) var baseRate: Float = 1
 
     @ObservationIgnored var start: Double = 0 // where to start, in seconds
     @ObservationIgnored var gen = 0 // tells this start from later ones
@@ -127,6 +131,9 @@ public final class Player {
                 watch(item)
                 av.replaceCurrentItem(with: item)
                 av.play()
+                if doubleSpeed == .held { // a finger still down, from the episode before
+                    av.rate = Self.doubleRate
+                }
             } catch {
                 state = .failed(friendly(error))
                 futures[ep.id] = nil // try afresh next time
@@ -253,6 +260,50 @@ public final class Player {
             gen += 1
             pending = false
             state = .idle
+        }
+    }
+
+    // MARK: - Double speed while held
+
+    /// The speed a press and hold on the video plays at.
+    public static let doubleRate: Float = 2
+
+    public enum DoubleSpeed: Equatable {
+        case off
+        case held // until the finger lifts
+        case locked // until the viewer turns it off
+    }
+
+    /// Starts a press and hold on the video: double speed until it ends,
+    /// unless double speed is locked on already.
+    public func beginHold() {
+        // Locked here, or picked from the system's speed menu: the menu's
+        // speed is the player's defaultRate.
+        if av.defaultRate == Self.doubleRate {
+            doubleSpeed = .locked
+            return
+        }
+        doubleSpeed = .held
+        baseRate = av.defaultRate
+        av.rate = Self.doubleRate
+    }
+
+    /// Ends a press and hold. A swipe during it flips the lock: down while
+    /// held locks double speed on, for the episodes after too; up while
+    /// locked goes back to the speed before.
+    public func endHold(swiped: Bool) {
+        switch (doubleSpeed, swiped) {
+        case (.held, true):
+            doubleSpeed = .locked
+            av.defaultRate = Self.doubleRate
+        case (.held, false), (.locked, true):
+            doubleSpeed = .off
+            av.defaultRate = baseRate
+            if av.rate != 0 { // still playing, rather than paused
+                av.rate = baseRate
+            }
+        default:
+            break
         }
     }
 
