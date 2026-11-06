@@ -28,33 +28,58 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["收藏"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["还没有收藏"].exists)
 
-        // Back on the series, an episode plays, and the next one after it.
+        // Back on the series, an episode plays; swiping up plays the next.
         tab(app, "推荐").tap()
         app.buttons["第 1 集"].firstMatch.tap()
         XCTAssertTrue(app.buttons["退出播放"].waitForExistence(timeout: 10), "the player did not open")
         let first = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH '第 1 集 / 共'")).firstMatch
         XCTAssertTrue(first.waitForExistence(timeout: 10))
-        app.buttons["下一集"].tap()
+        // Left of center, to miss the episode panel on iPad.
+        let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.3))
+        let middle = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.45))
+        let low = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.7))
+        low.press(forDuration: 0.05, thenDragTo: top)
         let second = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH '第 2 集 / 共'")).firstMatch
-        XCTAssertTrue(second.waitForExistence(timeout: 10))
+        XCTAssertTrue(second.waitForExistence(timeout: 10), "swiping up did not play the next episode")
         XCTAssertFalse(app.staticTexts["视频加载失败，请重试"].waitForExistence(timeout: 15), "the episode failed to play")
         let shot = XCTAttachment(screenshot: app.screenshot())
         shot.lifetime = .keepAlways
         add(shot)
 
+        // A tap pauses, and another plays on; so does the space bar.
+        middle.tap()
+        XCTAssertTrue(app.images["已暂停"].waitForExistence(timeout: 3), "a tap did not pause")
+        middle.tap()
+        XCTAssertFalse(app.images["已暂停"].waitForExistence(timeout: 2), "a tap did not play on")
+        app.typeKey(" ", modifierFlags: [])
+        XCTAssertTrue(app.images["已暂停"].waitForExistence(timeout: 3), "space did not pause")
+        app.typeKey(" ", modifierFlags: [])
+        XCTAssertFalse(app.images["已暂停"].waitForExistence(timeout: 2), "space did not play on")
+
         // Holding the video plays it at double speed; swiping down locks
         // that on, and holding again and swiping up turns it off.
-        // Left of center, to miss the episode panel on iPad.
-        let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.3))
-        let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.45))
-        top.press(forDuration: 1.5, thenDragTo: bottom, withVelocity: .slow, thenHoldForDuration: 1.5)
+        top.press(forDuration: 1.5, thenDragTo: middle, withVelocity: .slow, thenHoldForDuration: 1.5)
         XCTAssertTrue(app.staticTexts["已锁定 2 倍速，长按上滑可取消"].waitForExistence(timeout: 2), "double speed did not lock")
-        bottom.press(forDuration: 1.5, thenDragTo: top, withVelocity: .slow, thenHoldForDuration: 1.5)
+        middle.press(forDuration: 1.5, thenDragTo: top, withVelocity: .slow, thenHoldForDuration: 1.5)
         XCTAssertTrue(app.staticTexts["已恢复正常速度"].waitForExistence(timeout: 2), "double speed did not turn off")
 
-        // Leaving the player goes back to the series, which goes on from
-        // the episode watched.
-        app.buttons["退出播放"].tap()
+        // Search covers the player, and its back button goes on playing.
+        app.buttons["搜索"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["返回播放"].waitForExistence(timeout: 5), "search did not open")
+        app.buttons["返回播放"].tap()
+        XCTAssertTrue(app.buttons["退出播放"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.images["已暂停"].waitForExistence(timeout: 2), "the episode did not play on after search")
+
+        // The more menu picks a lower definition, which plays on; and goes
+        // back to the series, which goes on from the episode watched.
+        app.buttons["更多"].tap()
+        app.buttons["sparkles.tv"].tap()
+        app.buttons["720P"].firstMatch.tap()
+        XCTAssertFalse(app.staticTexts["视频加载失败，请重试"].waitForExistence(timeout: 5), "720P failed to play")
+        app.buttons["更多"].tap()
+        XCTAssertTrue(app.buttons["sparkles.tv"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["sparkles.tv"].label.contains("720P"), app.buttons["sparkles.tv"].label)
+        app.buttons["剧集详情"].tap()
         XCTAssertTrue(app.buttons["继续看第 2 集"].waitForExistence(timeout: 10))
     }
 

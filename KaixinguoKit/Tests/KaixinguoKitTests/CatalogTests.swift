@@ -53,15 +53,29 @@ func numbersSeasons(input: [Season], want: String) {
     #expect(episodesLabel(Series(episodeCount: 12, status: .updating)) == "更新至 12 集")
 }
 
-@Test func picksBestStream() {
+/// The best stream plays, unless the viewer picked a lower definition:
+/// then the best up to it, or the lowest there is.
+@Test func picksStream() {
     let streams = [
         Openhongguo.Stream(definition: "720p", height: 720, bitrate: 900, url: "a"),
         Openhongguo.Stream(definition: "1080p", height: 1080, bitrate: 1200, url: "b"),
         Openhongguo.Stream(definition: "1080p", height: 1080, bitrate: 2400, url: ""), // no URL
         Openhongguo.Stream(definition: "540p", bitrate: 500, url: "c"),
     ]
-    #expect(bestStream(streams)?.url == "b")
-    #expect(bestStream([]) == nil)
+    #expect(pickStream(streams)?.url == "b")
+    #expect(pickStream([]) == nil)
+    #expect(pickStream(streams, near: 720)?.url == "a")
+    #expect(pickStream(streams, near: 600)?.url == "c")
+    #expect(pickStream(streams, near: 360)?.url == "c")
+    #expect(pickStream(streams, near: 2160)?.url == "b")
+
+    // A picture on its end counts by its short side.
+    let upright = [
+        Openhongguo.Stream(width: 720, height: 1280, url: "d"),
+        Openhongguo.Stream(width: 1080, height: 1920, url: "e"),
+    ]
+    #expect(upright.map(lines) == [720, 1080])
+    #expect(pickStream(upright, near: 720)?.url == "d")
 }
 
 /// A search page with nothing new ends the feed, rather than the grid
@@ -252,13 +266,15 @@ func numbersSeasons(input: [Season], want: String) {
 @MainActor @Test func doubleSpeedWhileHeld() {
     let (model, _) = testModel()
     let p = model.player
-    p.av.defaultRate = 1.5 // from the speed menu
-    p.av.rate = 1.5
+    p.av.rate = 1 // as if playing
+    p.setSpeed(1.5)
+    #expect(p.av.rate == 1.5)
+    #expect(p.av.defaultRate == 1.5) // what the next episode plays at
 
     p.beginHold()
     #expect(p.doubleSpeed == .held)
     #expect(p.av.rate == 2)
-    #expect(p.av.defaultRate == 1.5)
+    #expect(p.speed == 1.5)
     p.endHold(swiped: false)
     #expect(p.doubleSpeed == .off)
     #expect(p.av.rate == 1.5)
@@ -266,8 +282,9 @@ func numbersSeasons(input: [Season], want: String) {
     p.beginHold()
     p.endHold(swiped: true)
     #expect(p.doubleSpeed == .locked)
+    #expect(p.speed == 2)
     #expect(p.av.rate == 2)
-    #expect(p.av.defaultRate == 2) // the next episode, and the menu, too
+    #expect(p.av.defaultRate == 2)
 
     // Holding again only shows it; a swipe the wrong way changes nothing.
     p.beginHold()
@@ -280,13 +297,40 @@ func numbersSeasons(input: [Season], want: String) {
     p.beginHold()
     p.endHold(swiped: true)
     #expect(p.doubleSpeed == .off)
+    #expect(p.speed == 1.5)
     #expect(p.av.defaultRate == 1.5)
     #expect(p.av.rate == 0) // still paused
 
-    // 2× picked from the menu counts as locked.
-    p.av.defaultRate = 2
+    // 2× picked from the speed menu counts as locked.
+    p.setSpeed(2)
+    #expect(p.av.rate == 0)
     p.beginHold()
     #expect(p.doubleSpeed == .locked)
+}
+
+/// The sleep timer pauses the video when its minutes are up, or stops it
+/// going on to the next episode.
+@MainActor @Test func sleepTimer() async {
+    let (model, catalog) = testModel()
+    catalog.update {
+        $0.series["1"] = Series(id: "1", title: "浅浅归聿", episodeCount: 3, platform: .outer)
+        $0.episodes["1"] = episodes("1", 3)
+    }
+    let p = model.player
+    p.setSleep(.minutes(30))
+    #expect(p.sleepAt != nil)
+    p.setSleep(.off)
+    #expect(p.sleepAt == nil)
+
+    p.play("1", 1)
+    await until { model.seriesPage("1").series != nil }
+    p.setSleep(.endOfEpisode)
+    p.ended()
+    #expect(p.number == 1) // no next episode
+    #expect(p.sleep == .off)
+    #expect(model.history.get("1")?.finished == true)
+    p.ended()
+    #expect(p.number == 2) // the timer is spent
 }
 
 /// What the viewer watched and saved survives a restart, in files the

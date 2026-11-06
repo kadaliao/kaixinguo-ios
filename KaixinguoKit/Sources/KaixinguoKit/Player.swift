@@ -30,10 +30,26 @@ public final class Player {
     /// Whether picture in picture shows the video, so leaving the screen
     /// keeps it playing.
     public var inPictureInPicture = false
+    /// Whether the video is paused, rather than playing or waiting to.
+    public private(set) var paused = false
+    /// The speed the viewer chose, from the speed menu or by locking double
+    /// speed on; the episodes after play at it too.
+    public private(set) var speed: Float = 1
     /// What a press and hold on the video has done to its speed.
     public private(set) var doubleSpeed: DoubleSpeed = .off
-    /// The speed the viewer chose, which double speed goes back to.
+    /// The speed before double speed, which it goes back to.
     public private(set) var baseRate: Float = 1
+    /// The definitions the episode comes in, as lines, best first: 1080,
+    /// 720, …; and the one playing.
+    public private(set) var qualities: [Int] = []
+    public private(set) var quality = 0
+    /// The definition the viewer picked, which later episodes keep to as
+    /// near as they can; nil for the best there is.
+    public private(set) var preferredQuality: Int?
+    /// When playback stops by itself.
+    public private(set) var sleep: Sleep = .off
+    /// When a sleep in minutes pauses the video.
+    public private(set) var sleepAt: Date?
 
     @ObservationIgnored var start: Double = 0 // where to start, in seconds
     @ObservationIgnored var gen = 0 // tells this start from later ones
@@ -44,6 +60,7 @@ public final class Player {
     @ObservationIgnored var loaders: [StreamLoader] = []
     @ObservationIgnored var itemStatus: NSKeyValueObservation?
     @ObservationIgnored var observers: [Any] = []
+    @ObservationIgnored var sleepTask: Task<Void, Never>?
 
     /// Future is an episode's playback model being resolved, shared by the
     /// start of the episode and the prefetch before it.
@@ -170,11 +187,11 @@ public final class Player {
         return f
     }
 
-    /// The item that plays the best stream of the model, decrypting it
-    /// with its key.
+    /// The item that plays the stream of the model nearest the definition
+    /// the viewer picked, decrypting it with its key.
     func makeItem(_ r: PlaybackResult, _ sp: SeriesPage, _ ep: Episode) throws -> AVPlayerItem {
         let pb = r.playback
-        guard let s = bestStream(pb.streams), let url = URL(string: s.url) else {
+        guard let s = pickStream(pb.streams, near: preferredQuality), let url = URL(string: s.url) else {
             throw AppError("这一集没有可以播放的视频")
         }
         if s.hls || s.dash || !pb.audioUrl.isEmpty {
@@ -200,6 +217,8 @@ public final class Player {
             loaders.removeFirst().invalidate()
         }
         let item = AVPlayerItem(asset: loader.makeAsset())
+        qualities = Array(Set(playable(pb.streams).map(lines))).sorted(by: >)
+        quality = lines(s)
         #if os(iOS)
         item.externalMetadata = metadata(sp, ep)
         #endif
@@ -240,6 +259,80 @@ public final class Player {
         page?.episode(number - 1) != nil
     }
 
+    // MARK: - Pausing and speed
+
+    /// The speeds the speed menu offers.
+    public static let speeds: [Float] = [0.75, 1, 1.25, 1.5, 2]
+
+    /// Pauses the video, or plays it on; from the start again if it had
+    /// ended.
+    public func togglePause() {
+        guard let item = av.currentItem else { return }
+        if av.rate != 0 {
+            av.pause()
+            return
+        }
+        let d = item.duration.seconds
+        if d.isFinite, item.currentTime().seconds >= d - 0.5 {
+            av.seek(to: .zero)
+        }
+        av.play()
+    }
+
+    /// Moves d seconds on through the episode, or back when d is negative.
+    public func skip(_ d: Double) {
+        guard let item = av.currentItem else { return }
+        var t = max(0, av.currentTime().seconds + d)
+        let end = item.duration.seconds
+        if end.isFinite {
+            t = min(t, max(0, end - 1))
+        }
+        av.seek(to: CMTime(seconds: t, preferredTimescale: 600))
+    }
+
+    /// Plays at r from now on, for the episodes after too.
+    public func setSpeed(_ r: Float) {
+        speed = r
+        av.defaultRate = r
+        if av.rate != 0 { // still playing, rather than paused
+            av.rate = r
+        }
+    }
+
+    /// Plays the episode on in the definition nearest q, and the episodes
+    /// after in it too.
+    public func setQuality(_ q: Int) {
+        preferredQuality = q
+        guard q != quality, let seriesID, state == .playing || state == .buffering else { return }
+        let t = av.currentTime().seconds
+        play(seriesID, number, start: t.isFinite ? t : 0)
+    }
+
+    /// When playback stops by itself: never, at the end of the episode
+    /// playing, or some minutes from now.
+    public enum Sleep: Hashable, Sendable {
+        case off
+        case endOfEpisode
+        case minutes(Int)
+    }
+
+    public func setSleep(_ s: Sleep) {
+        sleep = s
+        sleepTask?.cancel()
+        sleepTask = nil
+        sleepAt = nil
+        guard case .minutes(let m) = s else { return }
+        let at = Date().addingTimeInterval(TimeInterval(m * 60))
+        sleepAt = at
+        sleepTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(at.timeIntervalSinceNow))
+            guard !Task.isCancelled, let self else { return }
+            self.av.pause()
+            self.sleep = .off
+            self.sleepAt = nil
+        }
+    }
+
     /// Tries the episode again, afresh, from where the viewer got to.
     public func retry() {
         guard let seriesID else { return }
@@ -277,14 +370,12 @@ public final class Player {
     /// Starts a press and hold on the video: double speed until it ends,
     /// unless double speed is locked on already.
     public func beginHold() {
-        // Locked here, or picked from the system's speed menu: the menu's
-        // speed is the player's defaultRate.
-        if av.defaultRate == Self.doubleRate {
+        if speed == Self.doubleRate { // locked here, or picked from the speed menu
             doubleSpeed = .locked
             return
         }
         doubleSpeed = .held
-        baseRate = av.defaultRate
+        baseRate = speed
         av.rate = Self.doubleRate
     }
 
@@ -295,13 +386,10 @@ public final class Player {
         switch (doubleSpeed, swiped) {
         case (.held, true):
             doubleSpeed = .locked
-            av.defaultRate = Self.doubleRate
+            setSpeed(Self.doubleRate)
         case (.held, false), (.locked, true):
             doubleSpeed = .off
-            av.defaultRate = baseRate
-            if av.rate != 0 { // still playing, rather than paused
-                av.rate = baseRate
-            }
+            setSpeed(baseRate)
         default:
             break
         }
@@ -364,6 +452,7 @@ public final class Player {
     }
 
     private func timeControlChanged() {
+        paused = av.timeControlStatus == .paused
         guard !episodeID.isEmpty, let sp = page else { return }
         switch av.timeControlStatus {
         case .playing:
@@ -399,11 +488,16 @@ public final class Player {
         record(sp, number, position: t, duration: d.isFinite ? d : 0, finished: false)
     }
 
-    /// On to the next episode, or the next season's first.
-    private func ended() {
+    /// On to the next episode, or the next season's first, unless the
+    /// sleep timer stops here.
+    func ended() {
         guard let sp = page else { return }
         episodeID = "" // the pause that follows the end is no progress
         record(sp, number, position: 0, duration: 0, finished: true)
+        if sleep == .endOfEpisode {
+            setSleep(.off)
+            return
+        }
         if let next = app.following(sp, number) {
             play(next.seriesID, next.number)
         }
@@ -438,15 +532,31 @@ public final class Player {
     #endif
 }
 
-/// The best stream of a model: the tallest, then the richest.
-func bestStream(_ streams: [Openhongguo.Stream]) -> Openhongguo.Stream? {
-    func height(_ s: Openhongguo.Stream) -> Int {
-        if s.height > 0 { return s.height }
-        let digits = Int(s.definition.prefix { $0.isASCII && $0.isNumber }) ?? 0
-        return digits > 0 ? digits : s.width
+/// The stream of a model to play: of the definitions up to q, the best,
+/// or the lowest if all are above it; the best of all when q is nil. Of
+/// streams the same, the richest.
+func pickStream(_ streams: [Openhongguo.Stream], near q: Int? = nil) -> Openhongguo.Stream? {
+    let ok = playable(streams)
+    let order: (Openhongguo.Stream, Openhongguo.Stream) -> Bool = { (lines($0), $0.bitrate) < (lines($1), $1.bitrate) }
+    guard let q else { return ok.max(by: order) }
+    return ok.filter { lines($0) <= q }.max(by: order) ?? ok.min { lines($0) < lines($1) }
+}
+
+/// The streams with somewhere to fetch them from.
+func playable(_ streams: [Openhongguo.Stream]) -> [Openhongguo.Stream] {
+    streams.filter { !$0.url.trimmingCharacters(in: .whitespaces).isEmpty }
+}
+
+/// A stream's definition, as lines: 720 for "720p", a picture 720 wide
+/// and 1280 tall included; from the short side of its picture when the
+/// label doesn't say.
+func lines(_ s: Openhongguo.Stream) -> Int {
+    let digits = Int(s.definition.prefix { $0.isASCII && $0.isNumber }) ?? 0
+    if digits > 0 {
+        return digits
     }
-    return streams.filter { !$0.url.trimmingCharacters(in: .whitespaces).isEmpty }
-        .max { (height($0), $0.bitrate) < (height($1), $1.bitrate) }
+    let short = min(s.width, s.height)
+    return short > 0 ? short : max(s.width, s.height)
 }
 
 /// Whether an episode counts as watched: played to its end, or nine tenths

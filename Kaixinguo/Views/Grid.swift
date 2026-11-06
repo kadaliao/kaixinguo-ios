@@ -87,40 +87,21 @@ struct FeedState: View {
 }
 
 /// CardView is a series in a grid: its poster, title and a line about it.
-/// A long press saves it.
+/// It opens the series, unless `playCard` in the environment says to play
+/// it instead. A long press saves it.
 struct CardView: View {
     let card: Card
     @Environment(AppModel.self) private var model
+    @Environment(\.playCard) private var playCard
 
     var body: some View {
         let saved = model.favorites.has(card.id)
-        NavigationLink(value: Route.series(card.id)) {
-            VStack(alignment: .leading, spacing: 7) {
-                Poster(url: card.cover)
-                    .overlay(alignment: .topLeading) {
-                        if card.rank > 0 {
-                            RankBadge(rank: card.rank).padding(6)
-                        }
-                    }
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text(card.title)
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                        if saved {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
-                                .accessibilityLabel("已收藏")
-                        }
-                    }
-                    Text(card.sub.isEmpty ? " " : card.sub)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+        Group {
+            if let playCard {
+                Button { playCard.play(card) } label: { label(saved) }
+            } else {
+                NavigationLink(value: Route.series(card.id)) { label(saved) }
             }
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -132,6 +113,45 @@ struct CardView: View {
         }
         .accessibilityElement(children: .combine)
     }
+
+    private func label(_ saved: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Poster(url: card.cover)
+                .overlay(alignment: .topLeading) {
+                    if card.rank > 0 {
+                        RankBadge(rank: card.rank).padding(6)
+                    }
+                }
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(card.title)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    if saved {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("已收藏")
+                    }
+                }
+                Text(card.sub.isEmpty ? " " : card.sub)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+/// PlayCard is what tapping a card does in place of opening its series: in
+/// the player's search, play it.
+struct PlayCard {
+    let play: (Card) -> Void
+}
+
+extension EnvironmentValues {
+    @Entry var playCard: PlayCard?
 }
 
 /// RankBadge is a series' place on a chart, the first three in medal
