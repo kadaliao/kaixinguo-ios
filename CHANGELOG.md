@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+## [0.3.0] - 2026-11-06
+
 ### 新增
 
 - 播放时按住画面 2 倍速播放，松手恢复；按住时下滑锁定 2 倍速，之后再按住上滑取消，按住时会提示往哪边滑
@@ -49,6 +51,7 @@
 - AirPlay 只能屏幕镜像
 - 第一次启动要注册匿名设备，网络慢时列表可能要等十几秒才出来；之后启动会先显示缓存
 
-[未发布]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.2.0...HEAD
+[未发布]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kadaliao/kaixinguo-ios/releases/tag/v0.1.0
