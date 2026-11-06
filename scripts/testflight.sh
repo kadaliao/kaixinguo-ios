@@ -1,7 +1,8 @@
 #!/bin/sh
 # testflight.sh archives the app, signs it for the App Store and uploads it
-# to App Store Connect; it shows in TestFlight once Apple has processed it,
-# in 5 to 15 minutes.
+# to App Store Connect. Internal testers can install it once Apple has
+# processed it, in 5 to 15 minutes; then beta-review.sh submits it to review
+# for the public link.
 #
 #   ASC_KEY_ID=<key id> ASC_ISSUER_ID=<issuer id> scripts/testflight.sh
 #
@@ -55,4 +56,9 @@ xcodebuild -exportArchive -archivePath "$out/Kaixinguo.xcarchive" -exportPath "$
 echo "[3/3] 上传"
 xcrun altool --upload-app -f "$out/export/Kaixinguo.ipa" -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
 plist=$out/Kaixinguo.xcarchive/Info.plist
-echo "已上传 $(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleShortVersionString' "$plist") ($(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleVersion' "$plist"))，处理完会出现在 TestFlight"
+version=$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleShortVersionString' "$plist")
+number=$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleVersion' "$plist")
+echo "已上传 $version ($number)，内部测试组处理完就能装"
+
+echo
+"$here/scripts/beta-review.sh" "$version" "$number"
