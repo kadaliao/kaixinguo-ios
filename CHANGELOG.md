@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+## [0.4.0] - 2026-11-07
+
 ### 新增
 
 - 退出 App 再打开，回到上次所在的标签和页面（剧集页、搜索结果、排行榜和新剧的选择）；退出时在看剧的话，直接回到播放页，停在退出时的那一秒，点一下接着放
@@ -55,7 +57,8 @@
 - AirPlay 只能屏幕镜像
 - 第一次启动要注册匿名设备，网络慢时列表可能要等十几秒才出来；之后启动会先显示缓存
 
-[未发布]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.3.0...HEAD
+[未发布]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kadaliao/kaixinguo-ios/releases/tag/v0.1.0
