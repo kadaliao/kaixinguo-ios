@@ -33,11 +33,16 @@ public final class AppModel {
     // Series.
     @ObservationIgnored var series: [String: SeriesPage] = [:]
 
+    // Where the viewer was, for the next launch.
+    @ObservationIgnored let sessions: JSONStore<Session>
+    @ObservationIgnored var savedSession: Session?
+
     public init(catalog: any Catalog, dataDir: URL, cacheDir: URL) {
         self.catalog = catalog
         self.cacheDir = cacheDir
         history = History(dir: dataDir)
         favorites = Favorites(dir: dataDir)
+        sessions = JSONStore(url: dataDir.appendingPathComponent("session.json"))
         covers = CoverStore(dir: cacheDir.appendingPathComponent("covers"))
         home = Feed(fetch: Self.discover(catalog))
         _player = Player(app: self)
@@ -62,6 +67,7 @@ public final class AppModel {
     public func flush() {
         history.flush()
         favorites.flush()
+        sessions.flush()
     }
 
     /// The feed of key, made with make the first time.

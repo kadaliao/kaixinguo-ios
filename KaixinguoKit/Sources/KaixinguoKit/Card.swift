@@ -118,29 +118,37 @@ public func metaLine(_ s: Series) -> String {
 
 /// Names a day of the calendar (YYYYMMDD) as people say it.
 public func dayLabel(_ d: String, today: String) -> String {
-    let f = DateFormatter()
-    f.calendar = Calendar(identifier: .gregorian)
-    f.locale = Locale(identifier: "en_US_POSIX")
-    f.dateFormat = "yyyyMMdd"
-    guard let day = f.date(from: d), let now = f.date(from: today) else { return d }
-    let cal = Calendar(identifier: .gregorian)
-    switch cal.dateComponents([.day], from: now, to: day).day ?? 99 {
+    guard let n = daysFrom(today, to: d), let day = dayFormatter().date(from: d) else { return d }
+    switch n {
     case 0: return "今天"
     case 1: return "明天"
     case -1: return "昨天"
     default:
-        let c = cal.dateComponents([.month, .day], from: day)
+        let c = Calendar(identifier: .gregorian).dateComponents([.month, .day], from: day)
         return "\(c.month ?? 0)月\(c.day ?? 0)日"
     }
 }
 
+/// How many days of the calendar d comes after today, or nil when either
+/// isn't a day.
+func daysFrom(_ today: String, to d: String) -> Int? {
+    let f = dayFormatter()
+    guard let day = f.date(from: d), let now = f.date(from: today) else { return nil }
+    return Calendar(identifier: .gregorian).dateComponents([.day], from: now, to: day).day
+}
+
 /// Today as the calendar of new releases names days.
 public func todayKey(_ now: Date = Date()) -> String {
+    dayFormatter().string(from: now)
+}
+
+/// How the calendar of new releases names days: 20261107.
+private func dayFormatter() -> DateFormatter {
     let f = DateFormatter()
     f.calendar = Calendar(identifier: .gregorian)
     f.locale = Locale(identifier: "en_US_POSIX")
     f.dateFormat = "yyyyMMdd"
-    return f.string(from: now)
+    return f
 }
 
 public func seasonLabel(_ se: Season) -> String { "第 \(se.index) 季" }

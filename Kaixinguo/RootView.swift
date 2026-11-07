@@ -5,6 +5,7 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(Router.self) private var router
+    @State private var launching = true // until the first frame is up
 
     var body: some View {
         @Bindable var router = router
@@ -32,6 +33,10 @@ struct RootView: View {
                 .environment(model)
                 .environment(router)
         }
+        // A player the app opens again where it was left is there from the
+        // start, rather than sliding up over the page under it.
+        .transaction { if launching { $0.disablesAnimations = true } }
+        .task { launching = false }
     }
 
     private func stack(_ tab: Router.Tab, @ViewBuilder root: () -> some View) -> some View {

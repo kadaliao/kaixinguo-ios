@@ -8,8 +8,9 @@ final class SmokeTests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testBrowseSaveAndPlay() throws {
+    @MainActor func testBrowseSaveAndPlay() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["-KXFresh", "YES"] // not where the last run left off
         app.launch()
 
         // A recommendation opens its page.
@@ -83,10 +84,46 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["继续看第 2 集"].waitForExistence(timeout: 10))
     }
 
+    /// Quitting and opening the app again comes back where it was: the
+    /// episode paused at the second it got to, and the series page under it.
+    @MainActor func testComesBackWhereItWas() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-KXFresh", "YES"]
+        app.launch()
+        let card = app.scrollViews.buttons.firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 60), "no recommendations")
+        card.tap()
+        XCTAssertTrue(app.staticTexts["选集"].waitForExistence(timeout: 30), "the series page did not open")
+        app.buttons["第 1 集"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["退出播放"].waitForExistence(timeout: 10), "the player did not open")
+
+        // A few seconds in, a tap pauses it.
+        let progress = app.descendants(matching: .any)["播放进度"]
+        XCTAssertTrue(progress.waitForExistence(timeout: 20), "the episode did not load")
+        sleep(5)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.45)).tap()
+        XCTAssertTrue(app.images["已暂停"].waitForExistence(timeout: 3), "a tap did not pause")
+        let at = try XCTUnwrap(progress.value as? String)
+        XCTAssertFalse(at.hasPrefix("0:00"), at)
+
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+        XCTAssertTrue(app.buttons["退出播放"].waitForExistence(timeout: 10), "the player did not open again")
+        let first = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH '第 1 集 / 共'")).firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        let back = NSPredicate(format: "value == %@", at)
+        wait(for: [expectation(for: back, evaluatedWith: progress)], timeout: 20)
+        XCTAssertTrue(app.images["已暂停"].exists, "it played on by itself")
+
+        app.buttons["退出播放"].tap()
+        XCTAssertTrue(app.staticTexts["选集"].waitForExistence(timeout: 10), "the series page did not come back")
+    }
+
     /// The button that opens a tab. On iPad each tab's button holds another
     /// of the same name, and the back button to a tab's page is named after
     /// it too.
-    private func tab(_ app: XCUIApplication, _ name: String) -> XCUIElement {
+    @MainActor private func tab(_ app: XCUIApplication, _ name: String) -> XCUIElement {
         app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != 'BackButton'", name)).firstMatch
     }
 }

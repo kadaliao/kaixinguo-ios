@@ -6,17 +6,49 @@ import SwiftUI
 struct KaixinguoApp: App {
     @State private var model: AppModel?
     @State private var startError = ""
-    @State private var router = Router()
+    @State private var router: Router
     @Environment(\.scenePhase) private var phase
 
     init() {
         // Play with the ringer off, and on in picture in picture.
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        let router = Router()
+        _router = State(initialValue: router)
         do {
-            _model = State(initialValue: try AppModel.live())
+            let model = try AppModel.live()
+            if !Self.fresh, let s = model.lastSession() {
+                router.restore(s)
+                model.restore(s)
+            }
+            Self.keep(model, router)
+            _model = State(initialValue: model)
         } catch {
             _startError = State(initialValue: error.localizedDescription)
         }
+    }
+
+    /// Saves where the viewer is each time it changes, so the next launch
+    /// opens there again: the pages, and the episode, even as picture in
+    /// picture goes on to the next one with the app in the background.
+    private static func keep(_ model: AppModel, _ router: Router) {
+        let s = withObservationTracking {
+            router.session(model)
+        } onChange: {
+            Task { @MainActor in keep(model, router) }
+        }
+        model.save(s)
+    }
+
+    /// Whether to open as on the first launch, rather than where the last
+    /// one left off: for the interface tests, and for screenshots, which
+    /// open a link of their own.
+    private static var fresh: Bool {
+        #if DEBUG
+        let d = UserDefaults.standard
+        return d.bool(forKey: "KXFresh") || d.string(forKey: "KXOpen") != nil
+        #else
+        false
+        #endif
     }
 
     var body: some Scene {
@@ -40,6 +72,9 @@ struct KaixinguoApp: App {
             }
         }
         .onChange(of: phase) {
+            if phase != .active {
+                model?.player.recordProgress() // to the second, should the app not come back
+            }
             if phase == .background {
                 model?.flush() // what was saved last reaches the disk
             }
@@ -60,6 +95,11 @@ struct KaixinguoApp: App {
         guard url.scheme == "kaixinguo" else { return }
         let id = url.pathComponents.dropFirst().first
         let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        // A link to a page shows it, rather than the player the app may
+        // have opened again over it, where it was left.
+        if url.host() != "play" && model.player.isPresented {
+            model.player.leave()
+        }
         switch url.host() {
         case "series":
             if let id { router.open(.series(id)) }

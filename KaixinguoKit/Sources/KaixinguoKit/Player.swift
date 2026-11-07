@@ -52,6 +52,7 @@ public final class Player {
     public private(set) var sleepAt: Date?
 
     @ObservationIgnored var start: Double = 0 // where to start, in seconds
+    @ObservationIgnored var startPaused = false // waits there for the viewer
     @ObservationIgnored var gen = 0 // tells this start from later ones
     @ObservationIgnored var pending = false // waits for the series to load
     @ObservationIgnored var episodeID = "" // the episode the item plays
@@ -82,12 +83,15 @@ public final class Player {
 
     // MARK: - Starting an episode
 
-    /// Opens the player on episode n of the series, from start seconds in.
-    public func play(_ seriesID: String, _ n: Int, start: Double = 0) {
+    /// Opens the player on episode n of the series, from start seconds in;
+    /// `paused` waits there for the viewer, as when the app opens again
+    /// where it was left.
+    public func play(_ seriesID: String, _ n: Int, start: Double = 0, paused: Bool = false) {
         gen += 1
         self.seriesID = seriesID
         number = n
         self.start = start
+        startPaused = paused
         pending = false
         state = .resolving
         // In picture in picture the next episode plays in the window, and
@@ -134,7 +138,10 @@ public final class Player {
         }
         state = .resolving
         sp.reveal(number)
-        record(sp, number, position: start, duration: 0, finished: false)
+        // The length the history knows stays until the video says it again,
+        // which a paused start may not for a while.
+        let length = app.history.get(sp.id).flatMap { $0.episode == number ? $0.duration : nil } ?? 0
+        record(sp, number, position: start, duration: length, finished: false)
         let gen = gen, start = start
         let f = resolve(ep)
         Task {
@@ -147,9 +154,13 @@ public final class Player {
                 seekOnReady = start
                 watch(item)
                 av.replaceCurrentItem(with: item)
-                av.play()
-                if doubleSpeed == .held { // a finger still down, from the episode before
-                    av.rate = Self.doubleRate
+                if startPaused {
+                    paused = true // as it was: no change of status says so
+                } else {
+                    av.play()
+                    if doubleSpeed == .held { // a finger still down, from the episode before
+                        av.rate = Self.doubleRate
+                    }
                 }
             } catch {
                 state = .failed(friendly(error))
@@ -412,7 +423,7 @@ public final class Player {
         })
         observers.append(av.addPeriodicTimeObserver(forInterval: CMTime(seconds: 3, preferredTimescale: 600),
                                                     queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.progress() }
+            MainActor.assumeIsolated { self?.recordProgress() }
         })
         #if os(iOS)
         let commands = MPRemoteCommandCenter.shared()
@@ -439,7 +450,10 @@ public final class Player {
         switch status {
         case .readyToPlay:
             if seekOnReady > 0 {
-                av.seek(to: CMTime(seconds: seekOnReady, preferredTimescale: 600))
+                // To the frame: the default tolerance may land seconds off,
+                // and the viewer comes back to the second they left.
+                av.seek(to: CMTime(seconds: seekOnReady, preferredTimescale: 600),
+                        toleranceBefore: .zero, toleranceAfter: .zero)
                 seekOnReady = 0
             }
         case .failed:
@@ -465,7 +479,7 @@ public final class Player {
                 state = .buffering
             }
         case .paused:
-            progress()
+            recordProgress()
         @unknown default:
             break
         }
@@ -480,7 +494,10 @@ public final class Player {
         }
     }
 
-    private func progress() {
+    /// Records how far the episode has got: every 3 seconds as it plays,
+    /// when it pauses, and as the app leaves the screen, which may be the
+    /// last chance.
+    public func recordProgress() {
         guard !episodeID.isEmpty, let sp = page, let item = av.currentItem else { return }
         let t = item.currentTime().seconds
         guard t.isFinite, t > 0 else { return }

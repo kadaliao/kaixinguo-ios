@@ -444,3 +444,82 @@ func numbersSeasons(input: [Season], want: String) {
     #expect(f.cards.last?.id == "c") // the third page, not the second again
     #expect(f.more)
 }
+
+/// Where the viewer was comes back on the next launch: the pages the app
+/// adds, the chart and the day chosen, and the episode the player had open,
+/// paused where the viewer got to.
+@MainActor @Test func sessionComesBack() async throws {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kxg-\(UUID().uuidString)")
+    let catalog = FakeCatalog()
+    catalog.update {
+        $0.series["1"] = Series(id: "1", title: "甲", episodeCount: 3, platform: .outer)
+        $0.episodes["1"] = episodes("1", 3)
+    }
+    func launch() -> AppModel {
+        AppModel(catalog: catalog, dataDir: dir.appendingPathComponent("data"),
+                 cacheDir: dir.appendingPathComponent("cache"))
+    }
+    let first = launch()
+    #expect(first.lastSession() == nil)
+    first.rankBoard = "b2"
+    first.newDate = todayKey(Date().addingTimeInterval(-86_400))
+    first.player.play("1", 2)
+    await until { first.player.state != .resolving }
+    first.history.record(Watch(seriesID: "1", episode: 2, position: 42.5, duration: 90)) // as it pauses
+    var s = first.session
+    #expect(s.playing == Session.Playing(seriesID: "1", episode: 2))
+    s.tab = "rank"
+    s.pages = ["rank": ["1"]]
+    s.searchQuery = "总裁"
+    first.save(s)
+    first.flush()
+
+    let next = launch()
+    let last = try #require(next.lastSession())
+    #expect(last == s)
+    next.restore(last)
+    #expect(next.rankBoard == "b2")
+    #expect(next.newDate == first.newDate)
+    let p = next.player
+    #expect(p.isPresented)
+    #expect(p.seriesID == "1" && p.number == 2)
+    #expect(p.start == 42.5)
+    #expect(p.startPaused)
+    await until { p.state != .resolving }
+    #expect(next.history.get("1")?.duration == 90) // kept, though the video hasn't said it again
+}
+
+/// The session keeps the episode while the player shows it, on its screen
+/// or in picture in picture, and lets it go once the viewer leaves.
+@MainActor @Test func sessionFollowsThePlayer() {
+    let (model, _) = testModel()
+    #expect(model.session.playing == nil)
+    model.player.play("1", 4)
+    #expect(model.session.playing == Session.Playing(seriesID: "1", episode: 4))
+    model.player.inPictureInPicture = true
+    model.player.isPresented = false
+    #expect(model.session.playing?.episode == 4)
+    model.player.inPictureInPicture = false
+    #expect(model.session.playing == nil)
+}
+
+/// A day the calendar no longer shows goes back to today, an episode
+/// watched to its end opens from its start, and a file from before a field
+/// was added still reads.
+@MainActor @Test func sessionRestoresWhatStillHolds() throws {
+    let (model, _) = testModel()
+    model.history.record(Watch(seriesID: "1", episode: 5, finished: true))
+    var s = Session()
+    s.newDate = todayKey(Date().addingTimeInterval(-8 * 86_400))
+    s.playing = Session.Playing(seriesID: "1", episode: 5)
+    model.restore(s)
+    #expect(model.newDate == "")
+    #expect(model.player.number == 5)
+    #expect(model.player.start == 0)
+
+    let url = model.sessions.url
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(#"[{"tab":"mine"}]"#.utf8).write(to: url)
+    #expect(model.lastSession()?.tab == "mine")
+    #expect(model.lastSession()?.playing == nil)
+}

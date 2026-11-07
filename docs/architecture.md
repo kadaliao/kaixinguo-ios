@@ -44,10 +44,11 @@ flowchart LR
 | `KaixinguoKit/…/Seasons.swift` | 季的编号和排序 | `data.go` |
 | `KaixinguoKit/…/Card.swift` | 卡片和各种文案（集数、热度、日期） | `data.go`、`view_series.go` |
 | `KaixinguoKit/…/Store.swift` | JSON 文件存储、观看记录、收藏 | `store.go`、`history.go`、`favorites.go` |
+| `KaixinguoKit/…/Session.swift` | 上次停在哪儿：标签、页面、搜索、播放器开着的那一集 | 无 |
 | `KaixinguoKit/…/CoverStore.swift` | 封面：下载、缩小、磁盘缓存、内存缓存 | `covers.go`、`internal/imageio` |
 | `KaixinguoKit/…/Catalog.swift` | 对 SDK 的抽象（测试里换成假的）、错误文案 | `data.go` 的 `friendly` |
-| `Kaixinguo/KaixinguoApp.swift` | 入口、音频会话、退到后台时写盘、`kaixinguo://` 链接 | `main.go` |
-| `Kaixinguo/RootView.swift`、`Router.swift` | 标签页（iPhone 底栏、iPad 侧栏）、每个标签的导航栈 | `view.go` 的侧栏和路由 |
+| `Kaixinguo/KaixinguoApp.swift` | 入口、音频会话、退到后台时写盘、回到上次的地方、`kaixinguo://` 链接 | `main.go` |
+| `Kaixinguo/RootView.swift`、`Router.swift` | 标签页（iPhone 底栏、iPad 侧栏）、每个标签的导航栈，以及它们和 `Session` 的互转 | `view.go` 的侧栏和路由 |
 | `Kaixinguo/Views/Grid.swift` | 海报网格、卡片、封面、空状态、选择用的胶囊 | `view.go` |
 | `Kaixinguo/Views/CatalogViews.swift` | 推荐、排行榜、新剧上线、搜索、热搜、我的 | `view.go` |
 | `Kaixinguo/Views/SeriesView.swift` | 剧集详情 | `view_series.go` |
@@ -89,6 +90,23 @@ flowchart LR
 
 `PlayerHost` 全程只用一个 `AVPlayerViewController`。画中画开始时关掉播放页（视频留在小窗里），控制器还被 `PlayerHost` 持有，所以画中画不会断；在小窗里点还原时重新打开播放页，把同一个控制器放回去，视频飞回原处。
 
+## 回到上次的地方
+
+App 退出或被系统关掉后再打开，回到上次的样子。`Session` 记着：
+
+- 所在的标签，每个标签里打开的剧集页（只记剧集 ID，页面打开时重新加载），搜索框里的字和正在显示的搜索；
+- 排行榜选的类型和榜单、新剧上线选的日子；
+- 播放器开着的话（全屏或画中画），是哪部剧的第几集。
+
+几处做法：
+
+- **随改随存**：`KaixinguoApp.keep` 用 `withObservationTracking` 盯着 `Router` 和 `AppModel` 里这些属性，一变就存到 `session.json`（和上次一样就不写）。不等退到后台再存，因为从多任务界面划掉 App 时不一定有机会；画中画在后台连播下一集时也能记下来。
+- **播放位置从观看记录里取**：`Session` 只记第几集，秒数用 `history.json` 里这一集的位置。播放器暂停时会记一次进度，App 离开前台（`scenePhase` 不是 `.active`）时也补记一次，所以能精确到秒。
+- **暂停着回来**：`Player.play(…, paused: true)` 加载这一集、跳到那一秒（`seek` 的容差是零，不会落到几秒外的关键帧），但不播放，画面上显示暂停图标，点一下接着放。看完的那一集从头开始。
+- **直接出现**：启动时播放页不做上滑动画，避免先闪一下下面的页面（`RootView` 第一帧之前关掉过渡动画）。
+- **过期的选择不恢复**：新剧上线的日历只有今天前后各一周，选的日子已经不在里面的话回到今天。
+- 用 `kaixinguo://` 链接打开 App 时，先恢复再打开链接；链接要去某个页面的话，会先关掉恢复出来的播放页。
+
 ## 封面
 
 封面 CDN 只给 HEIC，ImageIO 直接能解。`CoverStore` 解码时缩小到最长边 600 像素（3 倍屏上网格里的海报），以 JPEG 存到 `Caches/covers/`，内存里用 `NSCache` 保留解码后的位图，内存紧张时系统会自动清掉。
@@ -103,6 +121,7 @@ flowchart LR
 | --- | --- | --- |
 | `Application Support/history.json` | 观看记录，最近的在前，最多 200 部；每部记着看到哪里和看完了哪几集 | `History` |
 | `Application Support/favorites.json` | 收藏，最近收藏的在前 | `Favorites` |
+| `Application Support/session.json` | 上次停在哪儿，见「回到上次的地方」；只有 iOS 版有 | `AppModel.save` |
 | `Application Support/openhongguo/anonymous.json` | SDK 注册的匿名设备，不参与备份 | openhongguo |
 | `Caches/home.json` | 推荐页第一页 | `AppModel` |
 | `Caches/covers/` | 封面 JPEG | `CoverStore` |
@@ -137,9 +156,9 @@ CENC_SAMPLE=enc.mp4 CENC_KEY=<密钥> CENC_CLEAR=clear.mp4 swift test --filter "
 KX_ONLINE=1 swift test --filter playsOnline
 ```
 
-**界面冒烟测试**（`KaixinguoUITests`）在模拟器里像用户一样操作：打开推荐的第一部剧、收藏、在「我的」里找到它、播放、下一集、退出后看到「继续看第 2 集」。它用真实接口，需要网络。
+**界面冒烟测试**（`KaixinguoUITests`）在模拟器里像用户一样操作：打开推荐的第一部剧、收藏、在「我的」里找到它、播放、下一集、退出后看到「继续看第 2 集」；播放几秒暂停、关掉 App 再打开，回到同一集的同一秒，退出播放页后是那部剧的详情页。它用真实接口，需要网络。Debug 构建启动时认 `-KXFresh YES`，像第一次打开那样不恢复上次的地方，测试用它保证每次从推荐页开始。
 
-**截图**：Debug 构建启动时认 `-KXOpen <链接>` 参数，直接打开 `kaixinguo://` 链接，不弹系统的确认框。`scripts/shoot.sh` 用它构建、启动并截图：
+**截图**：Debug 构建启动时认 `-KXOpen <链接>` 参数，直接打开 `kaixinguo://` 链接，不弹系统的确认框；这时也不恢复上次的地方。`scripts/shoot.sh` 用它构建、启动并截图：
 
 ```sh
 scripts/shoot.sh "iPhone Air" kaixinguo://series/<剧集 ID> /tmp/series.png

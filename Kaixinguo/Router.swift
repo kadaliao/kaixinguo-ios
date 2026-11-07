@@ -1,3 +1,4 @@
+import KaixinguoKit
 import SwiftUI
 
 /// Route is a page a tab's stack can push.
@@ -8,7 +9,7 @@ enum Route: Hashable {
 /// Router is where the viewer is: the tab, and the pages pushed in each.
 @MainActor @Observable
 final class Router {
-    enum Tab: Hashable {
+    enum Tab: String, Hashable {
         case discover, rank, new, mine, search
     }
 
@@ -51,5 +52,36 @@ final class Router {
         if paths[tab]?.isEmpty == false {
             paths[tab]?.removeLast()
         }
+    }
+}
+
+extension Router {
+    /// Where the viewer is, the model's part included, to open there again
+    /// on the next launch.
+    func session(_ model: AppModel) -> Session {
+        var s = model.session
+        s.tab = tab.rawValue
+        for (t, path) in paths where !path.isEmpty {
+            s.pages[t.rawValue] = path.map { r in
+                switch r {
+                case .series(let id): id
+                }
+            }
+        }
+        s.searchText = searchText
+        s.searchQuery = searchQuery
+        return s
+    }
+
+    /// Opens the tab, the pages and the search the session had open.
+    func restore(_ s: Session) {
+        tab = Tab(rawValue: s.tab) ?? .discover
+        for (name, ids) in s.pages {
+            if let t = Tab(rawValue: name) {
+                paths[t] = ids.map(Route.series)
+            }
+        }
+        searchText = s.searchText
+        searchQuery = s.searchQuery
     }
 }
