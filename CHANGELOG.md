@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+## [0.5.0] - 2026-11-11
+
 ### 新增
 
 - 播放横屏的剧时，iPhone 播放页顶部倍速和搜索之间多一个旋转按钮：点一下横屏看，再点回到竖屏，锁了竖屏方向也能用；之后把手机转到同一个方向，画面就重新跟着手机转，退出播放回到竖屏
@@ -61,7 +63,8 @@
 - AirPlay 只能屏幕镜像
 - 第一次启动要注册匿名设备，网络慢时列表可能要等十几秒才出来；之后启动会先显示缓存
 
-[未发布]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.4.0...HEAD
+[未发布]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.1.0...v0.2.0
