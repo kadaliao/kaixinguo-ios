@@ -4,6 +4,7 @@ import SwiftUI
 
 @main
 struct KaixinguoApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var model: AppModel?
     @State private var startError = ""
     @State private var router: Router
@@ -120,5 +121,14 @@ struct KaixinguoApp: App {
         default:
             break
         }
+    }
+}
+
+/// AppDelegate tells the system which ways the screen may turn: just the
+/// one the player's button turned it to, while that holds.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                     supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        Rotation.shared.mask
     }
 }

@@ -47,6 +47,7 @@ struct PlayerScreen: View {
         }
         .background(Color.black.ignoresSafeArea())
         .environment(\.colorScheme, .dark)
+        .onDisappear { Rotation.shared.release() }
         .statusBarHidden(landscape)
         .persistentSystemOverlays(landscape ? .hidden : .automatic)
         .sheet(isPresented: $showEpisodes) {
@@ -94,7 +95,7 @@ private struct VideoArea: View {
             PauseMark()
             PlayerOverlay()
             VStack(spacing: 0) {
-                TopBar(search: search)
+                TopBar(landscape: landscape, search: search)
                 SpeedHint()
                 Spacer(minLength: 0)
                 ProgressBar()
@@ -188,8 +189,9 @@ private struct PauseMark: View {
 // MARK: - Over the video
 
 /// TopBar is what plays, and how fast, over the top of the video, with the
-/// way out, to search and to more.
+/// way out, to turn the screen, to search and to more.
 private struct TopBar: View {
+    var landscape: Bool
     var search: () -> Void
     @Environment(AppModel.self) private var model
 
@@ -220,6 +222,7 @@ private struct TopBar: View {
             .accessibilityAddTraits(.isStaticText)
             Spacer(minLength: 8)
             SpeedMenu()
+            RotateButton(landscape: landscape)
             Button(action: search) {
                 Image(systemName: "magnifyingglass")
                     .frame(width: 44, height: 44)
@@ -264,6 +267,27 @@ private struct SpeedMenu: View {
         }
         .accessibilityLabel("倍速")
         .accessibilityValue(player.speed == 1 ? "正常" : "\(rateText(player.speed)) 倍")
+    }
+}
+
+/// RotateButton turns the screen on its side for a video wider than tall,
+/// and upright again: on iPhone, where on its side the screen shows the
+/// video alone. It stays while the screen is held on its side, so there is
+/// always a way back, even to a series shot upright.
+private struct RotateButton: View {
+    var landscape: Bool
+    @Environment(AppModel.self) private var model
+    private let rotation = Rotation.shared
+
+    var body: some View {
+        if UIDevice.current.userInterfaceIdiom == .phone, model.player.wide || rotation.held == .landscape {
+            Button { rotation.turn(landscape: !landscape) } label: {
+                Image(systemName: landscape ? "rectangle.portrait.rotate" : "rectangle.landscape.rotate")
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel(landscape ? "竖屏观看" : "横屏观看")
+        }
     }
 }
 
@@ -901,6 +925,85 @@ final class PlayerHost: NSObject, @MainActor AVPlayerViewControllerDelegate, UIG
         player?.isPresented = true
         // The screen slides up first; then the video flies back into it.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { done(true) }
+    }
+}
+
+// MARK: - Turning the screen
+
+/// Rotation turns the screen at a press: on its side, whichever way the
+/// phone is held, and upright again. The way pressed holds until the phone
+/// is turned that way too, when the screen goes back to following the
+/// phone; and as the player closes.
+@MainActor @Observable
+final class Rotation {
+    static let shared = Rotation()
+
+    /// The way a press turned the screen, while the phone isn't turned so:
+    /// `.landscape` or `.portrait`.
+    private(set) var held: UIInterfaceOrientationMask?
+    @ObservationIgnored private var observer: Any?
+
+    private init() {
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+        observer = NotificationCenter.default.addObserver(forName: UIDevice.orientationDidChangeNotification,
+                                                          object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.phoneTurned() }
+        }
+    }
+
+    /// The ways the screen may turn: the one pressed, while it holds, or
+    /// else those of the project's Info.plist settings.
+    var mask: UIInterfaceOrientationMask {
+        held ?? (UIDevice.current.userInterfaceIdiom == .phone ? .allButUpsideDown : .all)
+    }
+
+    /// Turns the screen on its side, or upright.
+    func turn(landscape: Bool) {
+        let phone = UIDevice.current.orientation
+        held = Self.held(phone, as: landscape) ? nil : landscape ? .landscape : .portrait
+        update(landscape ? Self.side(phone) : .portrait)
+    }
+
+    /// Lets the screen follow the phone again, as the player closes:
+    /// upright, unless the phone is on its side.
+    func release() {
+        guard held != nil else { return }
+        held = nil
+        let phone = UIDevice.current.orientation
+        update(phone.isLandscape ? Self.side(phone) : .portrait)
+    }
+
+    private func phoneTurned() {
+        guard let held, Self.held(UIDevice.current.orientation, as: held == .landscape) else { return }
+        self.held = nil
+        update(nil)
+    }
+
+    /// Whether the phone is on its side, or upright, as asked.
+    private static func held(_ phone: UIDeviceOrientation, as landscape: Bool) -> Bool {
+        landscape ? phone.isLandscape : phone == .portrait
+    }
+
+    /// The screen on its side the right way up for the phone: the top
+    /// toward the left unless it's held the other way.
+    private static func side(_ phone: UIDeviceOrientation) -> UIInterfaceOrientationMask {
+        phone == .landscapeRight ? .landscapeLeft : .landscapeRight
+    }
+
+    /// Tells the system the ways the screen may turn have changed, and
+    /// turns it to `to`.
+    private func update(_ to: UIInterfaceOrientationMask?) {
+        guard let scene = UIApplication.shared.connectedScenes.lazy.compactMap({ $0 as? UIWindowScene }).first else {
+            return
+        }
+        var vc = scene.keyWindow?.rootViewController
+        while let v = vc {
+            v.setNeedsUpdateOfSupportedInterfaceOrientations()
+            vc = v.presentedViewController
+        }
+        if let to {
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: to))
+        }
     }
 }
 

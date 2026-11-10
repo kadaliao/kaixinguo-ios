@@ -50,6 +50,9 @@ public final class Player {
     public private(set) var sleep: Sleep = .off
     /// When a sleep in minutes pauses the video.
     public private(set) var sleepAt: Date?
+    /// Whether the episode's picture is wider than it is tall: from its
+    /// stream at first, then from the video itself.
+    public private(set) var wide = false
 
     @ObservationIgnored var start: Double = 0 // where to start, in seconds
     @ObservationIgnored var startPaused = false // waits there for the viewer
@@ -60,6 +63,7 @@ public final class Player {
     @ObservationIgnored var futures: [String: Future] = [:]
     @ObservationIgnored var loaders: [StreamLoader] = []
     @ObservationIgnored var itemStatus: NSKeyValueObservation?
+    @ObservationIgnored var itemSize: NSKeyValueObservation?
     @ObservationIgnored var observers: [Any] = []
     @ObservationIgnored var sleepTask: Task<Void, Never>?
 
@@ -88,6 +92,9 @@ public final class Player {
     /// where it was left.
     public func play(_ seriesID: String, _ n: Int, start: Double = 0, paused: Bool = false) {
         gen += 1
+        if seriesID != self.seriesID {
+            wide = false // another series may be shot the other way
+        }
         self.seriesID = seriesID
         number = n
         self.start = start
@@ -230,6 +237,9 @@ public final class Player {
         let item = AVPlayerItem(asset: loader.makeAsset())
         qualities = Array(Set(playable(pb.streams).map(lines))).sorted(by: >)
         quality = lines(s)
+        if s.width > 0, s.height > 0 {
+            wide = s.width > s.height
+        }
         #if os(iOS)
         item.externalMetadata = metadata(sp, ep)
         #endif
@@ -241,6 +251,7 @@ public final class Player {
     func stopItem(keep: Bool = false) {
         av.pause()
         itemStatus = nil
+        itemSize = nil
         episodeID = "" // what the old item does no longer counts
         if !keep {
             av.replaceCurrentItem(with: nil)
@@ -443,6 +454,17 @@ public final class Player {
             let id = ObjectIdentifier(item), status = item.status
             Task { @MainActor in self?.itemStatusChanged(id, status) }
         }
+        itemSize = item.observe(\.presentationSize, options: [.new]) { [weak self] item, _ in
+            let id = ObjectIdentifier(item), size = item.presentationSize
+            Task { @MainActor in self?.itemSizeChanged(id, size) }
+        }
+    }
+
+    /// What the video says of its picture, once it knows, over what its
+    /// stream said.
+    private func itemSizeChanged(_ id: ObjectIdentifier, _ size: CGSize) {
+        guard let item = av.currentItem, ObjectIdentifier(item) == id, size.width > 0, size.height > 0 else { return }
+        wide = size.width > size.height
     }
 
     private func itemStatusChanged(_ id: ObjectIdentifier, _ status: AVPlayerItem.Status) {
