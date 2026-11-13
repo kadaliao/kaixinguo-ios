@@ -66,6 +66,7 @@ public final class Player {
     @ObservationIgnored var itemSize: NSKeyValueObservation?
     @ObservationIgnored var observers: [Any] = []
     @ObservationIgnored var sleepTask: Task<Void, Never>?
+    @ObservationIgnored var reel: DanmakuReel? // the danmaku of the episode last shown
 
     /// Future is an episode's playback model being resolved, shared by the
     /// start of the episode and the prefetch before it.

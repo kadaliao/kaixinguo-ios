@@ -92,6 +92,7 @@ private struct VideoArea: View {
             PlayerControllerView(player: model.player)
                 .offset(y: PlayerHost.shared.hud.offset)
                 .ignoresSafeArea(edges: landscape ? .all : .top)
+            DanmakuLayer()
             PauseMark()
             PlayerOverlay()
             VStack(spacing: 0) {
@@ -143,6 +144,57 @@ private struct PlayerOverlay: View {
             }
         default:
             EmptyView()
+        }
+    }
+}
+
+/// Where the viewer's choice to show danmaku or not is kept.
+private let danmakuKey = "danmaku"
+
+/// DanmakuLayer flies the episode's danmaku across the top of the video,
+/// white with a dark edge, each where the time the video has got to puts
+/// it: they stand still while it pauses, follow a seek, and go along with a
+/// swipe. Picture in picture shows the video alone.
+private struct DanmakuLayer: View {
+    @Environment(AppModel.self) private var model
+    @AppStorage(danmakuKey) private var on = true
+    /// The size of their type, and the distance from one lane to the next.
+    private let size: CGFloat = 16, pitch: CGFloat = 28
+
+    var body: some View {
+        let player = model.player
+        if on, player.state == .playing || player.state == .buffering,
+           let flights = player.danmaku()?.flights, !flights.isEmpty {
+            let av = player.av, size = size, pitch = pitch
+            TimelineView(.animation(minimumInterval: player.paused ? 0.25 : 1.0 / 60)) { _ in
+                let t = av.currentTime().seconds
+                Canvas { ctx, canvas in
+                    guard t.isFinite else { return }
+                    let across = Double(canvas.width / size)
+                    let edge = [CGPoint(x: -1, y: 0), CGPoint(x: 1, y: 0), CGPoint(x: 0, y: -1), CGPoint(x: 0, y: 1)]
+                    for f in flights {
+                        guard let x = f.x(at: t, across: across) else { continue }
+                        var text = ctx.resolve(Text(verbatim: f.text).font(.system(size: size, weight: .semibold)))
+                        let at = CGPoint(x: CGFloat(x) * size, y: (CGFloat(f.lane) + 0.5) * pitch)
+                        guard at.x + text.measure(in: CGSize(width: CGFloat.infinity, height: CGFloat.infinity)).width > 0 else {
+                            continue
+                        }
+                        text.shading = .color(.black.opacity(0.75))
+                        for d in edge {
+                            ctx.draw(text, at: CGPoint(x: at.x + d.x, y: at.y + d.y), anchor: .leading)
+                        }
+                        text.shading = .color(.white)
+                        ctx.draw(text, at: at, anchor: .leading)
+                    }
+                }
+            }
+            .frame(height: pitch * CGFloat(DanmakuFlight.lanes))
+            .frame(maxHeight: .infinity, alignment: .top)
+            .padding(.top, 48) // below the top bar
+            .ignoresSafeArea(edges: .horizontal)
+            .offset(y: PlayerHost.shared.hud.offset)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
     }
 }
@@ -305,11 +357,12 @@ private struct SpeedPicker: View {
     }
 }
 
-/// MoreMenu sets how the episode plays: its speed, its definition and when
-/// to stop; and saves the series, or opens its page.
+/// MoreMenu sets how the episode plays: its speed, its definition, when to
+/// stop and whether danmaku show; and saves the series, or opens its page.
 private struct MoreMenu: View {
     @Environment(AppModel.self) private var model
     @Environment(Router.self) private var router
+    @AppStorage(danmakuKey) private var danmaku = true
 
     var body: some View {
         let player = model.player
@@ -344,6 +397,7 @@ private struct MoreMenu: View {
                 Label("定时关闭", systemImage: "moon.zzz")
                 Text(sleepLine(player))
             }
+            Toggle("弹幕", systemImage: "text.bubble", isOn: $danmaku)
             if let sp = player.page, let series = sp.series {
                 Divider()
                 let saved = model.favorites.has(sp.id)

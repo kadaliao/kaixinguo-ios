@@ -14,6 +14,7 @@ final class FakeCatalog: Catalog {
         var search: @Sendable (String, SearchOptions) throws -> Page<SeriesSummary> = { _, _ in Page() }
         var batch: [String: Series] = [:]
         var suggestions: [Suggestion] = []
+        var danmaku: [String: DanmakuPage] = [:] // by episode and cursor, as "e1:c1"
         var calls: [String] = []
     }
 
@@ -54,6 +55,12 @@ final class FakeCatalog: Catalog {
 
     func listEpisodes(_ seriesId: String, options: EpisodeOptions) async throws -> Page<Episode> {
         Page(items: state.withLock { $0.episodes[seriesId] } ?? [])
+    }
+
+    func listDanmaku(_ seriesId: String, episodeId: String, options: DanmakuOptions) async throws -> DanmakuPage {
+        let key = "\(episodeId):\(options.cursor ?? "")"
+        note("danmaku:\(key)")
+        return state.withLock { $0.danmaku[key] } ?? DanmakuPage()
     }
 
     func seasons(_ seriesId: String) async throws -> Album {
