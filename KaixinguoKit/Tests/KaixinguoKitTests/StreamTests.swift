@@ -95,7 +95,7 @@ func playsEncryptedEpisode() async throws {
 
 /// Plays the first episode of a recommended series through the real SDK
 /// and CDN, when KX_ONLINE is set: the whole way, from the anonymous
-/// device to frames on screen.
+/// device to frames on screen, and the danmaku over them.
 @MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["KX_ONLINE"] != nil))
 func playsOnline() async throws {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kxg-online-\(UUID().uuidString)")
@@ -117,6 +117,14 @@ func playsOnline() async throws {
     #expect(model.player.state == .playing, "\(card.title): \(model.player.state)")
     #expect(model.player.av.currentTime().seconds > 2)
     #expect(model.history.get(card.id)?.episode == 1)
+
+    // The episode's danmaku read to the last page; an episode may have none.
+    let reel = try #require(model.player.danmaku())
+    for _ in 0..<300 where reel.loading {
+        try await Task.sleep(for: .milliseconds(100))
+    }
+    #expect(!reel.loading)
+    #expect(reel.error == nil, "\(friendly(reel.error))")
 
     // The cover downloads, as HEIC, and keeps on disk.
     let cover = await model.covers.image(card.cover)

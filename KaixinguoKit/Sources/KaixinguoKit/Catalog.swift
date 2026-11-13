@@ -12,6 +12,7 @@ public protocol Catalog: Sendable {
     func getSeries(_ seriesId: String) async throws -> Series
     func getSeriesBatch(_ seriesIds: [String]) async throws -> [SeriesDetail]
     func listEpisodes(_ seriesId: String, options: EpisodeOptions) async throws -> Page<Episode>
+    func listDanmaku(_ seriesId: String, episodeId: String, options: DanmakuOptions) async throws -> DanmakuPage
     func seasons(_ seriesId: String) async throws -> Album
     func shortRank(_ query: ShortRankQuery) async throws -> ShortRanking
     func resolvePlayback(_ episodeId: String) async throws -> PlaybackResult

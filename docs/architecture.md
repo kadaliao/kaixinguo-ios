@@ -38,6 +38,7 @@ flowchart LR
 | `KaixinguoKit/Sources/CENC/CENC.swift` | 把 CENC 加密的 MP4 按字节区间还原成明文 | `internal/cenc` |
 | `KaixinguoKit/…/StreamLoader.swift` | AVFoundation 的资源加载器：按区间下载、解密、交给播放器 | `proxy.go` |
 | `KaixinguoKit/…/Player.swift` | 播放流程：解析播放地址、预取下一集、选流、连播、记录进度 | `play.go` |
+| `KaixinguoKit/…/Danmaku.swift` | 弹幕：读一集的弹幕、分配轨道、算出每条此刻的位置 | 无 |
 | `KaixinguoKit/…/AppModel.swift` | 全部状态、各页的 fetcher、热搜、首页缓存 | `main.go`、`data.go` |
 | `KaixinguoKit/…/Feed.swift` | 分页加载的列表，去重、自动重试、下拉刷新 | `data.go` 的 `feed` |
 | `KaixinguoKit/…/SeriesPage.swift` | 剧集详情：分集、选季、分段、续播位置、连播的下一集 | `data.go`、`play.go` |
@@ -56,7 +57,7 @@ flowchart LR
 
 ## 线程模型
 
-**`AppModel`、`Feed`、`SeriesPage`、`Player`、`History`、`Favorites` 都属于主线程**（`@MainActor @Observable`）。工程用 Swift 6 语言模式，编译器会检查这条约定。
+**`AppModel`、`Feed`、`SeriesPage`、`Player`、`DanmakuReel`、`History`、`Favorites` 都属于主线程**（`@MainActor @Observable`）。工程用 Swift 6 语言模式，编译器会检查这条约定。
 
 - 视图直接读这些对象的属性，SwiftUI 的 Observation 据此决定重绘哪些视图。
 - 网络请求用 `Task { … }` 发起：`await` SDK 时让出主线程，结果回来后在主线程上改状态。
@@ -89,6 +90,15 @@ flowchart LR
 ### 画中画
 
 `PlayerHost` 全程只用一个 `AVPlayerViewController`。画中画开始时关掉播放页（视频留在小窗里），控制器还被 `PlayerHost` 持有，所以画中画不会断；在小窗里点还原时重新打开播放页，把同一个控制器放回去，视频飞回原处。
+
+### 弹幕
+
+播放页要显示弹幕时调用 `Player.danmaku()`，它通过 SDK 的 `listDanmaku` 从这一集的开头一页页读，直到 `hasMore` 为假。一页是服务端划出的一段播放时间（约 30 秒），没人发弹幕的那段是空页，后面可能还有。服务端只下发精选的几十到几百条，所以一次读完，拖动进度时不用从新位置重读；只留最近一集的，换集时停掉上一集还没读完的。
+
+- **轨道**：弹幕在视频上方的 4 条轨道里从右往左飞，速度都一样，所以后一条追不上前一条。每条放进它出现时最上面有空的轨道，前一条的尾巴进场、再空出 2 个字宽才算有空；轨道都满时，等最先空出来的那条，1.5 秒内等不到就不显示，免得挤在一起或者远远落后于画面。字宽按字符估算（汉字 1 个字宽，字母数字 0.6，emoji 1.25）。
+- **位置只看视频时间**：每条弹幕的位置由视频当前的时间算出来，播放页逐帧重画（暂停时每 0.25 秒一次）。所以暂停时弹幕停住，拖动、倍速、换集都不用另外处理。
+- 白字黑边，不支持颜色和位置；只能看不能发（不提供登录）。画中画里是系统播放器的窗口，叠不上去，所以不显示。
+- 开关在「⋯」里，默认开，存在 `UserDefaults` 里；关着时不读弹幕。
 
 ## 回到上次的地方
 
@@ -143,7 +153,7 @@ App 退出或被系统关掉后再打开，回到上次的样子。`Session` 记
 (cd KaixinguoKit && swift test)
 ```
 
-- **逻辑测试**（`KaixinguoKitTests`）用 `FakeCatalog` 代替 SDK，不联网：分页和去重、缓存合并、自动重试、搜索回退和补封面、选季和续播、播放状态、观看记录和收藏的读写（包括 Go 写的文件）。
+- **逻辑测试**（`KaixinguoKitTests`）用 `FakeCatalog` 代替 SDK，不联网：分页和去重、缓存合并、自动重试、搜索回退和补封面、选季和续播、播放状态、弹幕的分页和轨道、观看记录和收藏的读写（包括 Go 写的文件）。
 - **解密测试**（`CENCTests`）在测试里从零拼出加密的 MP4（用 CommonCrypto 自己的 CTR 模式加密，不拿解密器验证自己），覆盖 senc、子样本、saiz/saio、moov 在文件末尾等情况，整段和任意切片解密结果必须一致。
 
 两个可选的测试需要真实数据：
@@ -152,7 +162,7 @@ App 退出或被系统关掉后再打开，回到上次的样子。`Session` 记
 # 拿一集真实的加密剧集：和 Go 版的输出逐字节比较，并经 StreamLoader 交给 AVFoundation 解码、播放、拖动
 CENC_SAMPLE=enc.mp4 CENC_KEY=<密钥> CENC_CLEAR=clear.mp4 swift test --filter "decryptsRealEpisode|playsEncryptedEpisode"
 
-# 联网：从注册匿名设备到播放推荐的第一部剧，再下载一张封面
+# 联网：从注册匿名设备到播放推荐的第一部剧，读完它的弹幕，再下载一张封面
 KX_ONLINE=1 swift test --filter playsOnline
 ```
 
