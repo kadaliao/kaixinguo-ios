@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+## [0.6.0] - 2026-11-14
+
 ### 新增
 
 - 播放时显示弹幕：其他观众的弹幕白字黑边，从视频上方从右往左飘过，暂停时停住，拖动进度后跟着走；只看不发，画中画里不显示。默认打开，可以在「⋯」里关掉，下次打开还是关着
@@ -73,7 +75,8 @@
 - AirPlay 只能屏幕镜像
 - 第一次启动要注册匿名设备，网络慢时列表可能要等十几秒才出来；之后启动会先显示缓存
 
-[未发布]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.5.1...HEAD
+[未发布]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.3.0...v0.4.0
