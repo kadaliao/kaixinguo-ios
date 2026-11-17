@@ -1,13 +1,13 @@
 {
-  "originHash" : "2ab82733d0974a9525261affd0428c38d453bf25cc7334a35d274369095588e2",
+  "originHash" : "48e8ba0095169efcdbd523ca9dcd7a5104f02717bd8bc92bea82fa3260778b06",
   "pins" : [
     {
       "identity" : "openhongguo",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kadaliao/openhongguo.git",
       "state" : {
-        "revision" : "47eeb2c205184dd7d737071e83c46ae9c37350ec",
-        "version" : "0.3.1-kx.1"
+        "revision" : "3e397e1c6ed05a555504b42598a01b50480a0a06",
+        "version" : "0.3.1-kx.2"
       }
     }
   ],

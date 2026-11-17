@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 import Observation
 import Openhongguo
-#if os(iOS)
+#if os(iOS) || os(tvOS)
 import AVKit // AVPlayerItem.externalMetadata
 import MediaPlayer
 #endif
@@ -241,7 +241,7 @@ public final class Player {
         if s.width > 0, s.height > 0 {
             wide = s.width > s.height
         }
-        #if os(iOS)
+        #if os(iOS) || os(tvOS)
         item.externalMetadata = metadata(sp, ep)
         #endif
         return item
@@ -437,7 +437,7 @@ public final class Player {
                                                     queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.recordProgress() }
         })
-        #if os(iOS)
+        #if os(iOS) || os(tvOS)
         let commands = MPRemoteCommandCenter.shared()
         commands.nextTrackCommand.addTarget { [weak self] _ in
             MainActor.assumeIsolated { self?.step(1) }
@@ -550,8 +550,8 @@ public final class Player {
                                  watched: watchedEnough(position, duration, finished: finished) ? [n] : []))
     }
 
-    #if os(iOS)
-    /// What Now Playing and the lock screen show.
+    #if os(iOS) || os(tvOS)
+    /// What Now Playing, the lock screen and Apple TV's info panel show.
     private func metadata(_ sp: SeriesPage, _ ep: Episode) -> [AVMetadataItem] {
         func item(_ id: AVMetadataIdentifier, _ value: NSCopying & NSObjectProtocol) -> AVMetadataItem {
             let m = AVMutableMetadataItem()

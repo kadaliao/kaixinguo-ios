@@ -24,10 +24,12 @@ flowchart LR
     Covers --> Cache[(Caches)]
 ```
 
-工程分两部分：
+工程分这几部分：
 
-- **`KaixinguoKit/`**：一个 Swift 包，装着除视图以外的一切。它同时能在 macOS 上编译，所以 `swift test` 直接在 Mac 上跑，不需要模拟器。
-- **`Kaixinguo/`**：App target，只有 SwiftUI 视图、路由和入口。
+- **`KaixinguoKit/`**：一个 Swift 包，装着除视图以外的一切。iPhone、iPad 和 Apple TV 共用；它同时能在 macOS 上编译，所以 `swift test` 直接在 Mac 上跑，不需要模拟器。
+- **`Kaixinguo/`**：iPhone 和 iPad 的 App target，只有 SwiftUI 视图、路由和入口。
+- **`KaixinguoTV/`**：Apple TV 的 App target，视图为遥控器重写，见「Apple TV」一节。
+- **`Shared/`**：两个 App target 都编进去的几个视图（海报、封面、列表的加载状态）。
 
 `Kaixinguo.xcodeproj` 由 [XcodeGen](https://github.com/yonaskolb/XcodeGen) 从 `project.yml` 生成，增删文件或改设置后运行 `xcodegen`。
 
@@ -50,10 +52,14 @@ flowchart LR
 | `KaixinguoKit/…/Catalog.swift` | 对 SDK 的抽象（测试里换成假的）、错误文案 | `data.go` 的 `friendly` |
 | `Kaixinguo/KaixinguoApp.swift` | 入口、音频会话、退到后台时写盘、回到上次的地方、`kaixinguo://` 链接 | `main.go` |
 | `Kaixinguo/RootView.swift`、`Router.swift` | 标签页（iPhone 底栏、iPad 侧栏）、每个标签的导航栈，以及它们和 `Session` 的互转 | `view.go` 的侧栏和路由 |
-| `Kaixinguo/Views/Grid.swift` | 海报网格、卡片、封面、空状态、选择用的胶囊 | `view.go` |
+| `Kaixinguo/Views/Grid.swift` | 海报网格、卡片、选择用的胶囊 | `view.go` |
+| `Shared/SharedViews.swift` | 海报、封面、列表还空着时的加载和出错状态，iOS 和 tvOS 共用 | `view.go` |
 | `Kaixinguo/Views/CatalogViews.swift` | 推荐、排行榜、新剧上线、搜索、热搜、我的 | `view.go` |
 | `Kaixinguo/Views/SeriesView.swift` | 剧集详情 | `view_series.go` |
 | `Kaixinguo/Views/PlayerScreen.swift` | 播放页（顶栏、进度条、手势、播放页里的搜索）、选集面板、画中画 | `view_player.go` |
+| `KaixinguoTV/KaixinguoTVApp.swift` | Apple TV 版的入口、导航栈，以及盖在上面的播放器 | 无 |
+| `KaixinguoTV/TVDiscoverView.swift`、`TVSeriesView.swift` | Apple TV 的推荐海报墙、剧集详情和选集 | 无 |
+| `KaixinguoTV/TVPlayerView.swift` | Apple TV 的播放：系统播放器和它自带的控件，外加「下一集」 | 无 |
 
 ## 线程模型
 
@@ -146,6 +152,20 @@ App 退出或被系统关掉后再打开，回到上次的样子。`Session` 记
 字段一旦发布就要保持兼容：只能加字段，不能改名或删除，新字段解码时要有默认值。
 
 `history.json` 里的 `watched` 是 iOS 版加的字段：这一季看完的集号，从小到大。一集播完，或播过九成（常有人跳过最后几秒直接看下一集），就记进去；`History.record` 把新记录和旧记录的 `watched` 合并，所以每 3 秒一次的进度记录不会把它冲掉。macOS 版还不认这个字段，读到会忽略。
+
+## Apple TV
+
+`KaixinguoTV` 和 iOS 版共用 KaixinguoKit：列表、剧集、播放流程、解密和观看记录都是同一份代码，只有视图另写。电视上没有触摸，靠遥控器移动焦点，所以：
+
+- 海报用 `.buttonStyle(.card)`，焦点落上去时浮起来；按住确认键弹出收藏菜单，相当于 iOS 上的长按。
+- 播放用系统的 `AVPlayerViewController`，**留着它自带的控件**：遥控器拖进度、暂停、下滑看信息面板都是现成的。iOS 版的手势、旋转、长按倍速在电视上都用不上。信息面板里的剧名、集数和封面来自 `Player` 设置的 `externalMetadata`，和 iOS 锁屏用的是同一份。
+- 下一集靠 `contextualActions` 在播放画面上放一个「下一集」按钮；一集放完照样自动连播。
+- openhongguo 的 xcframework 从 fork 的 `v0.3.1-kx.2` 起才有 tvOS 部分。官方 gomobile 编不了 tvOS，这两个部分是 fork 里的 `bindings/mobile/add-tvos.sh` 用 sagernet 的 gomobile 编出来再合进去的。
+
+还没做的：
+
+- 排行榜、新剧、搜索、我的；弹幕；顶部货架（Top Shelf）和电视用的分层图标。
+- **本地数据可能被清掉**。tvOS 只保证 `UserDefaults` 里 500 KB 以内的数据一直留着，Application Support 里的 `history.json`、`favorites.json` 在存储空间紧张时可能被系统删除。正式发布前要换个存法，比如存进 `UserDefaults` 或 iCloud。
 
 ## 测试
 
