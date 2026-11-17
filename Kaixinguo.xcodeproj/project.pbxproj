@@ -8,6 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		3FBE1BE3031D65D83EA123FB /* CatalogViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE9445CC718D3309FCFB9ED1 /* CatalogViews.swift */; };
+		4BB3792F847AB2AC6E22AFC3 /* TVPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F4DD386EF897517EF6151AC /* TVPlayerView.swift */; };
+		4F7613063A66B9ACD448D524 /* KaixinguoKit in Frameworks */ = {isa = PBXBuildFile; productRef = B92FEBF8BA5E736E0C2409A2 /* KaixinguoKit */; };
+		62871814249297E273C48CFA /* TVDiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4FF54AC3A97CE8D48422D64 /* TVDiscoverView.swift */; };
+		7AA9DA996D761D0AA33117F2 /* SharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0062DAF751D7B0D38655CED3 /* SharedViews.swift */; };
 		839B340AE8572B086F08587E /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1B2AC202921B8CD1C50B833 /* SmokeTests.swift */; };
 		86CB2F1BED0ED38298147BF0 /* Grid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FDC1A47AAC4719E55514205 /* Grid.swift */; };
 		87B7A079EDBE79DCD3C64F14 /* Router.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9938C07D670FF43DE1A16C6 /* Router.swift */; };
@@ -15,7 +19,10 @@
 		9AF2F7316F6BD2F00966E8B0 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = CA39E9C7DB75E5AA9EFE37A8 /* PrivacyInfo.xcprivacy */; };
 		9E9D14F0029030B1E68B5720 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13E45D7C2C398763A395FA1E /* RootView.swift */; };
 		A1C7482A08EF3D4590F92A2B /* KaixinguoKit in Frameworks */ = {isa = PBXBuildFile; productRef = C16FBDE1A2DFA5EBAC5C953B /* KaixinguoKit */; };
+		A6A003AD96B845E7DA6A2950 /* TVSeriesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A312149133AE793C0077BC60 /* TVSeriesView.swift */; };
+		B0496CDF70DD722E339E88AE /* KaixinguoTVApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA85AF22F1894BBFFDBDB2BC /* KaixinguoTVApp.swift */; };
 		C29D059CD809A2CC0A3DD2D8 /* SeriesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F95D9AC8833B59082956B019 /* SeriesView.swift */; };
+		CAC271161B1F310FFC0E66A5 /* SharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0062DAF751D7B0D38655CED3 /* SharedViews.swift */; };
 		D00373C11E064BD0B77EB1E7 /* PlayerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6B2CC9BBDF57FDEA8EA112C /* PlayerScreen.swift */; };
 		ED4637E64554E2FE4BC7E89E /* KaixinguoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDCA20F0C65FD0AD2A5EB0A7 /* KaixinguoApp.swift */; };
 /* End PBXBuildFile section */
@@ -31,13 +38,20 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0062DAF751D7B0D38655CED3 /* SharedViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedViews.swift; sourceTree = "<group>"; };
 		13E45D7C2C398763A395FA1E /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		21CA7965D396D5A22C7307D9 /* KaixinguoKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = KaixinguoKit; path = KaixinguoKit; sourceTree = SOURCE_ROOT; };
 		238F17A6E541D503C892FCCF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		3C3689B991A43F079A2F0A86 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		3F4DD386EF897517EF6151AC /* TVPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVPlayerView.swift; sourceTree = "<group>"; };
 		3FDC1A47AAC4719E55514205 /* Grid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Grid.swift; sourceTree = "<group>"; };
+		9AE1941C3D17AAB9CC78FCF9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		A312149133AE793C0077BC60 /* TVSeriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVSeriesView.swift; sourceTree = "<group>"; };
+		A4FF54AC3A97CE8D48422D64 /* TVDiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVDiscoverView.swift; sourceTree = "<group>"; };
 		A6B2CC9BBDF57FDEA8EA112C /* PlayerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerScreen.swift; sourceTree = "<group>"; };
 		A7B0B428A68C3A0E1217F12D /* KaixinguoUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KaixinguoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B890A57D30E6DE14C4154E9F /* KaixinguoTV.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KaixinguoTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BA85AF22F1894BBFFDBDB2BC /* KaixinguoTVApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaixinguoTVApp.swift; sourceTree = "<group>"; };
 		BAB4DC900029D7EDA16A3DAE /* Kaixinguo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Kaixinguo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C1B2AC202921B8CD1C50B833 /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
 		C9938C07D670FF43DE1A16C6 /* Router.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Router.swift; sourceTree = "<group>"; };
@@ -56,15 +70,33 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		9E68D8B5A9FC644C99AA6F07 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4F7613063A66B9ACD448D524 /* KaixinguoKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		086925ED3EA111FFE5D48B20 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				0062DAF751D7B0D38655CED3 /* SharedViews.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
 		1D5A576EAB850F5E49A1EE21 = {
 			isa = PBXGroup;
 			children = (
 				269BC6FCE444731A1BBBB40C /* Kaixinguo */,
+				EBF763F432E8825D1B16B310 /* KaixinguoTV */,
 				D5EF4DB05843F869D6949A17 /* KaixinguoUITests */,
 				B5417E9A47FCA29A96AD9B5A /* Packages */,
+				086925ED3EA111FFE5D48B20 /* Shared */,
 				FF8C7F8B314E0DEF09932109 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -118,10 +150,23 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		EBF763F432E8825D1B16B310 /* KaixinguoTV */ = {
+			isa = PBXGroup;
+			children = (
+				9AE1941C3D17AAB9CC78FCF9 /* Info.plist */,
+				BA85AF22F1894BBFFDBDB2BC /* KaixinguoTVApp.swift */,
+				A4FF54AC3A97CE8D48422D64 /* TVDiscoverView.swift */,
+				3F4DD386EF897517EF6151AC /* TVPlayerView.swift */,
+				A312149133AE793C0077BC60 /* TVSeriesView.swift */,
+			);
+			path = KaixinguoTV;
+			sourceTree = "<group>";
+		};
 		FF8C7F8B314E0DEF09932109 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				BAB4DC900029D7EDA16A3DAE /* Kaixinguo.app */,
+				B890A57D30E6DE14C4154E9F /* KaixinguoTV.app */,
 				A7B0B428A68C3A0E1217F12D /* KaixinguoUITests.xctest */,
 			);
 			name = Products;
@@ -168,6 +213,25 @@
 			productReference = BAB4DC900029D7EDA16A3DAE /* Kaixinguo.app */;
 			productType = "com.apple.product-type.application";
 		};
+		F8EAE4CFA72A931CAE077680 /* KaixinguoTV */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F0D5B24D8286AFAF1DA288C7 /* Build configuration list for PBXNativeTarget "KaixinguoTV" */;
+			buildPhases = (
+				463E99CBBDB1867E8621C4D2 /* Sources */,
+				9E68D8B5A9FC644C99AA6F07 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = KaixinguoTV;
+			packageProductDependencies = (
+				B92FEBF8BA5E736E0C2409A2 /* KaixinguoKit */,
+			);
+			productName = KaixinguoTV;
+			productReference = B890A57D30E6DE14C4154E9F /* KaixinguoTV.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -183,6 +247,10 @@
 						TestTargetID = DE58526772B09D371D8357FD;
 					};
 					DE58526772B09D371D8357FD = {
+						DevelopmentTeam = HMDAVG9B8J;
+						ProvisioningStyle = Automatic;
+					};
+					F8EAE4CFA72A931CAE077680 = {
 						DevelopmentTeam = HMDAVG9B8J;
 						ProvisioningStyle = Automatic;
 					};
@@ -206,6 +274,7 @@
 			projectRoot = "";
 			targets = (
 				DE58526772B09D371D8357FD /* Kaixinguo */,
+				F8EAE4CFA72A931CAE077680 /* KaixinguoTV */,
 				85AA074FD6111A4998CD2A37 /* KaixinguoUITests */,
 			);
 		};
@@ -224,6 +293,18 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		463E99CBBDB1867E8621C4D2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B0496CDF70DD722E339E88AE /* KaixinguoTVApp.swift in Sources */,
+				CAC271161B1F310FFC0E66A5 /* SharedViews.swift in Sources */,
+				62871814249297E273C48CFA /* TVDiscoverView.swift in Sources */,
+				4BB3792F847AB2AC6E22AFC3 /* TVPlayerView.swift in Sources */,
+				A6A003AD96B845E7DA6A2950 /* TVSeriesView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A03205ACCB77F72D39246FC4 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -235,6 +316,7 @@
 				9E9D14F0029030B1E68B5720 /* RootView.swift in Sources */,
 				87B7A079EDBE79DCD3C64F14 /* Router.swift in Sources */,
 				C29D059CD809A2CC0A3DD2D8 /* SeriesView.swift in Sources */,
+				7AA9DA996D761D0AA33117F2 /* SharedViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -281,6 +363,48 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
+		};
+		6F4803F2565228FFA0A760FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
+				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KaixinguoTV/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "开心果";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kadaliao.kaixinguo;
+				PRODUCT_NAME = KaixinguoTV;
+				SDKROOT = appletvos;
+				TARGETED_DEVICE_FAMILY = 3;
+			};
+			name = Debug;
+		};
+		8AC7FA245DE7DCA026766837 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
+				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KaixinguoTV/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "开心果";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kadaliao.kaixinguo;
+				PRODUCT_NAME = KaixinguoTV;
+				SDKROOT = appletvos;
+				TARGETED_DEVICE_FAMILY = 3;
+			};
+			name = Release;
 		};
 		8BE9F6BC8B9714BCA13C95FA /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -344,10 +468,10 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
+				TVOS_DEPLOYMENT_TARGET = 18.0;
 			};
 			name = Debug;
 		};
@@ -423,10 +547,10 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 6.0;
+				TVOS_DEPLOYMENT_TARGET = 18.0;
 			};
 			name = Release;
 		};
@@ -502,6 +626,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		F0D5B24D8286AFAF1DA288C7 /* Build configuration list for PBXNativeTarget "KaixinguoTV" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6F4803F2565228FFA0A760FA /* Debug */,
+				8AC7FA245DE7DCA026766837 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -512,6 +645,10 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		B92FEBF8BA5E736E0C2409A2 /* KaixinguoKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = KaixinguoKit;
+		};
 		C16FBDE1A2DFA5EBAC5C953B /* KaixinguoKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = KaixinguoKit;

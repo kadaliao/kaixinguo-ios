@@ -5,6 +5,7 @@ options:
   bundleIdPrefix: com.kadaliao
   deploymentTarget:
     iOS: "18.0"
+    tvOS: "18.0"
   developmentLanguage: zh-Hans
   createIntermediateGroups: true
 settings:
@@ -25,6 +26,7 @@ targets:
     platform: iOS
     sources:
       - path: Kaixinguo
+      - path: Shared
     dependencies:
       - package: KaixinguoKit
     settings:
@@ -51,6 +53,30 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.kadaliao.kaixinguo
             CFBundleURLSchemes: [kaixinguo]
+  # The Apple TV app: its own views, KaixinguoKit and Shared/ in common with
+  # the iOS app. The same bundle ID makes it the same app on the App Store.
+  KaixinguoTV:
+    type: application
+    platform: tvOS
+    sources:
+      - path: KaixinguoTV
+      - path: Shared
+    dependencies:
+      - package: KaixinguoKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kadaliao.kaixinguo
+        PRODUCT_NAME: KaixinguoTV
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: KaixinguoTV/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: 开心果
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.entertainment
+    info:
+      path: KaixinguoTV/Info.plist
+      properties:
+        CFBundleDevelopmentRegion: zh-Hans
+        ITSAppUsesNonExemptEncryption: false
   KaixinguoUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -71,6 +97,14 @@ schemes:
     test:
       targets:
         - KaixinguoUITests
+    run:
+      config: Debug
+    archive:
+      config: Release
+  KaixinguoTV:
+    build:
+      targets:
+        KaixinguoTV: all
     run:
       config: Debug
     archive:
