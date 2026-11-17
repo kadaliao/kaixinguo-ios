@@ -38,6 +38,21 @@
 5. 提交，打上标签：`git tag v<版本号> && git push --tags`。
 6. 在 GitHub 上建 Release，说明就是 `CHANGELOG.md` 里这个版本的那一节：`gh release create v<版本号> --verify-tag --title <版本号> --notes-file <这一节的内容>`。
 
+## Apple TV 版
+
+Apple TV 版和 iPhone/iPad 版是同一条 App 记录、同一个 Bundle ID，上架后是同一个 App（通用购买）。tvOS 平台在 2026-11-17 用 API 加上了，做法是建一个 tvOS 的 App Store 版本：`scripts/asc.sh POST /v1/appStoreVersions '{"data":{"type":"appStoreVersions","attributes":{"platform":"TV_OS","versionString":"1.0"},"relationships":{"app":{"data":{"type":"apps","id":"6831169843"}}}}}'`。没有这个平台时，上传会报 `Unable to find Apple ID for Bundle ID … on platform 'tvOS App'`。
+
+上传和 iOS 一样，多一个 `PLATFORM=tvOS`：
+
+```sh
+PLATFORM=tvOS ASC_KEY_ID=<密钥 ID> ASC_ISSUER_ID=<Issuer ID> scripts/testflight.sh
+```
+
+- **签名**：团队里没登记 Apple TV，生成不了开发描述文件，所以 tvOS 归档时不签名，导出时再签成 App Store 发布版（发布描述文件不需要设备）。
+- **构建号**：iOS 和 tvOS 在 App Store Connect 里各算各的，但都取 `project.yml` 里同一个 `CURRENT_PROJECT_VERSION`。只传其中一个平台时，用 `BUILD_NUMBER=<n>` 指定。
+- **测试内容**：默认和 iOS 一样取 `CHANGELOG.md` 里这个版本的那一节；要给 tvOS 单独写，就传 `WHAT_TO_TEST='<内容>'`。`beta-review.sh` 按平台找构建，iOS 和 tvOS 的版本号、构建号相同也不会找错。
+- **安装**：在 Apple TV 的 App Store 里装 TestFlight。内部测试员处理完就能装。Apple TV 打不开公开链接，所以外部测试员要先用和 Apple TV 相同的 Apple ID，在 iPhone 上打开「朋友」的公开链接并接受；tvOS 构建通过审核后，就会出现在 Apple TV 的 TestFlight 里。
+
 ## 邀请别人测试
 
 把公开链接发给对方。对方在 iPhone 或 iPad 上打开链接，按提示装好 TestFlight，再点「接受」「安装」就行，不用你在后台添加，也不用问对方要 Apple ID。之后的新版本会出现在对方的 TestFlight 里。
@@ -47,6 +62,6 @@
 ## 说明
 
 - **出口合规**：`Info.plist` 里声明了 `ITSAppUsesNonExemptEncryption = NO`。应用只用系统自带的 HTTPS，以及 CommonCrypto 解码视频，上传后不用再逐个回答出口合规问题。
-- **隐私清单**：`Kaixinguo/Resources/PrivacyInfo.xcprivacy` 声明了用到的「需要说明理由的 API」，主要来自 SDK 里的 Go 运行时（读文件元数据、计时）。新增这类 API 时记得补上。
+- **隐私清单**：`Shared/PrivacyInfo.xcprivacy`（iOS 和 tvOS 共用）声明了用到的「需要说明理由的 API」，主要来自 SDK 里的 Go 运行时（读文件元数据、计时）。新增这类 API 时记得补上。
 - **调 API**：`scripts/asc.sh <方法> <路径> [JSON]` 用同一把 API 密钥调 App Store Connect API，`beta-review.sh` 就是用它写的。例如看各测试组：`scripts/asc.sh GET /v1/apps/6831169843/betaGroups`。
 - **上传报 TLS 错误**：开着代理或 VPN 时，`altool` 可能报 `-9816`，内部重试后常常仍会成功。重传之前先到 App Store Connect 看看构建是不是已经在了，避免浪费构建号。

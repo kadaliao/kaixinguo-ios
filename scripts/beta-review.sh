@@ -10,11 +10,19 @@
 # testflight.sh runs it after every upload. Without arguments it takes the
 # version and build number in project.yml. Running it again is safe: it
 # refreshes What to Test and skips what is already done.
+#
+# PLATFORM=tvOS takes the Apple TV build of that version and number.
+# WHAT_TO_TEST=<text> fills What to Test with text instead of CHANGELOG.md.
 set -eu
 here=$(cd "$(dirname "$0")/.." && pwd)
 asc=$here/scripts/asc.sh
 app=6831169843
 group_name=朋友
+case ${PLATFORM:-iOS} in
+iOS) platform=IOS ;;
+tvOS) platform=TV_OS ;;
+*) echo "PLATFORM is iOS or tvOS" >&2; exit 2 ;;
+esac
 
 version=${1:-$(sed -n 's/^ *MARKETING_VERSION: *"\(.*\)"/\1/p' "$here/project.yml")}
 number=${2:-$(sed -n 's/^ *CURRENT_PROJECT_VERSION: *"\(.*\)"/\1/p' "$here/project.yml")}
@@ -32,7 +40,7 @@ link=$(printf %s "$group" | jq -r .attributes.publicLink)
 printf '[1/3] 等 App Store Connect 处理 %s (%s)' "$version" "$number"
 tries=0
 while :; do
-	build=$("$asc" GET "/v1/builds?filter[app]=$app&filter[version]=$number&filter[preReleaseVersion.version]=$version&fields[builds]=processingState" 2>/dev/null |
+	build=$("$asc" GET "/v1/builds?filter[app]=$app&filter[version]=$number&filter[preReleaseVersion.version]=$version&filter[preReleaseVersion.platform]=$platform&fields[builds]=processingState" 2>/dev/null |
 		jq -c '.data[0] // empty')
 	state=$(printf %s "$build" | jq -r '.attributes.processingState // empty')
 	case $state in
@@ -57,6 +65,7 @@ notes=$(awk -v v="[$version]" '
 notes="$notes
 
 遇到问题可以在 TestFlight 里截屏反馈。"
+notes=${WHAT_TO_TEST:-$notes}
 locs=$("$asc" GET "/v1/builds/$build_id/betaBuildLocalizations")
 loc=$(printf %s "$locs" | jq -r '.data[] | select(.attributes.locale == "zh-Hans") | .id')
 if [ -n "$loc" ]; then
