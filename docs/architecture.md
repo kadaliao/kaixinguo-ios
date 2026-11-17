@@ -46,7 +46,7 @@ flowchart LR
 | `KaixinguoKit/…/SeriesPage.swift` | 剧集详情：分集、选季、分段、续播位置、连播的下一集 | `data.go`、`play.go` |
 | `KaixinguoKit/…/Seasons.swift` | 季的编号和排序 | `data.go` |
 | `KaixinguoKit/…/Card.swift` | 卡片和各种文案（集数、热度、日期） | `data.go`、`view_series.go` |
-| `KaixinguoKit/…/Store.swift` | JSON 文件存储、观看记录、收藏 | `store.go`、`history.go`、`favorites.go` |
+| `KaixinguoKit/…/Store.swift` | JSON 存储（文件，或 tvOS 上的 UserDefaults）、观看记录、收藏 | `store.go`、`history.go`、`favorites.go` |
 | `KaixinguoKit/…/Session.swift` | 上次停在哪儿：标签、页面、搜索、播放器开着的那一集 | 无 |
 | `KaixinguoKit/…/CoverStore.swift` | 封面：下载、缩小、磁盘缓存、内存缓存 | `covers.go`、`internal/imageio` |
 | `KaixinguoKit/…/Catalog.swift` | 对 SDK 的抽象（测试里换成假的）、错误文案 | `data.go` 的 `friendly` |
@@ -142,11 +142,14 @@ App 退出或被系统关掉后再打开，回到上次的样子。`Session` 记
 | `Caches/home.json` | 推荐页第一页 | `AppModel` |
 | `Caches/covers/` | 封面 JPEG | `CoverStore` |
 
+Apple TV 版的观看记录和收藏不在文件里，在 UserDefaults 里，见「Apple TV」一节。
+
 `history.json` 和 `favorites.json` 的格式与 macOS 版相同（字段名一样，时间是 RFC 3339），两边的文件可以互相读。`JSONStore` 的规则也一样：
 
 - 主线程改完列表调用 `save`，后台队列写盘；还没来得及写的旧快照直接丢弃，只写最新的。
 - 原子写入，中途崩溃也不会留下半个文件。
 - 文件不存在或读不出来时当作空列表。
+- `JSONStore` 也可以把列表存进 UserDefaults 的一个键（`Place.defaults`），并设字节上限：编码后超过上限时，从列表末尾（最旧的）开始丢，直到放得下。只有 tvOS 用这种方式。
 - 退到后台时（`scenePhase == .background`）调用 `flush`，等最后一次写入落盘。
 
 字段一旦发布就要保持兼容：只能加字段，不能改名或删除，新字段解码时要有默认值。
@@ -161,11 +164,11 @@ App 退出或被系统关掉后再打开，回到上次的样子。`Session` 记
 - 播放用系统的 `AVPlayerViewController`，**留着它自带的控件**：遥控器拖进度、暂停、下滑看信息面板都是现成的。iOS 版的手势、旋转、长按倍速在电视上都用不上。信息面板里的剧名、集数和封面来自 `Player` 设置的 `externalMetadata`，和 iOS 锁屏用的是同一份。
 - 下一集靠 `contextualActions` 在播放画面上放一个「下一集」按钮；一集放完照样自动连播。
 - openhongguo 的 xcframework 从 fork 的 `v0.3.1-kx.2` 起才有 tvOS 部分。官方 gomobile 编不了 tvOS，这两个部分是 fork 里的 `bindings/mobile/add-tvos.sh` 用 sagernet 的 gomobile 编出来再合进去的。
+- **观看记录和收藏存在 UserDefaults 里**。存储空间紧张时，tvOS 可能删掉 App 的任何文件，Application Support 也不例外；只有 UserDefaults 里 500 KB 以内的数据一定留着。所以 `AppModel.live()` 在 tvOS 上把 `History` 和 `Favorites` 放进 UserDefaults 的 `history`、`favorites` 两个键，各给 200 KB。一部剧的记录约 0.5 KB，200 部也只有 100 KB 左右，上限只是兜底。SDK 的匿名设备、首页缓存和封面仍然是文件，被删了也只是重新注册、重新下载。
+- **图标**是分层的 5:3 横版：后层是渐变底和壳的阴影，中层是果壳，前层是播放键，焦点移上去时各层错开。顶部货架是一张开心果加「开心果 / 无广告、不烧心」的横幅。这些都由 `scripts/tv-icons.py` 从 `resources/icon.svg` 里同样的形状画出来，改图标后重跑一次就行（需要 `rsvg-convert` 和 ImageMagick）。
+- 隐私清单 `Shared/PrivacyInfo.xcprivacy` 两个 App 共用。
 
-还没做的：
-
-- 排行榜、新剧、搜索、我的；弹幕；顶部货架（Top Shelf）和电视用的分层图标。
-- **本地数据可能被清掉**。tvOS 只保证 `UserDefaults` 里 500 KB 以内的数据一直留着，Application Support 里的 `history.json`、`favorites.json` 在存储空间紧张时可能被系统删除。正式发布前要换个存法，比如存进 `UserDefaults` 或 iCloud。
+还没做的：排行榜、新剧、搜索、我的；弹幕；顶部货架只有静态图，不会显示最近观看。
 
 ## 测试
 

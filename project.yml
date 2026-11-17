@@ -67,6 +67,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kadaliao.kaixinguo
         PRODUCT_NAME: KaixinguoTV
+        ASSETCATALOG_COMPILER_APPICON_NAME: App Icon & Top Shelf Image
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_FILE: KaixinguoTV/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: 开心果

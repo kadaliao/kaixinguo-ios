@@ -2,22 +2,48 @@ import Foundation
 import Observation
 import Synchronization
 
-/// JSONStore keeps a list of values in a JSON file. The list itself belongs
-/// to its owner on the main actor; the store only writes snapshots of it,
-/// on a queue of its own, so saving never holds up a frame.
+/// JSONStore keeps a list of values as JSON, in a file or in the user
+/// defaults. The list itself belongs to its owner on the main actor; the
+/// store only writes snapshots of it, on a queue of its own, so saving
+/// never holds up a frame.
 public final class JSONStore<T: Codable & Sendable>: Sendable {
-    public let url: URL
+    /// Where a store keeps its list.
+    public enum Place: Sendable {
+        /// A file of its own.
+        case file(URL)
+        /// The user defaults of suite (the app's own when nil), under key,
+        /// in at most budget bytes. tvOS keeps an app's own defaults, up to
+        /// 500 KB, but may delete any of its files when storage runs low.
+        case defaults(key: String, suite: String? = nil, budget: Int)
+    }
+
+    public let place: Place
+    /// The file the list is in, when it is in one.
+    public var url: URL? {
+        if case .file(let url) = place { url } else { nil }
+    }
     private let queue = DispatchQueue(label: "kaixinguo.store", qos: .utility)
     private let pending = Mutex<[T]?>(nil)
 
-    public init(url: URL) {
-        self.url = url
+    public convenience init(url: URL) {
+        self.init(.file(url))
     }
 
-    /// Reads the list. A file that is missing or unreadable reads as an
-    /// empty list: the app opens clean rather than refusing to open.
+    public init(_ place: Place) {
+        self.place = place
+    }
+
+    /// Reads the list. One that is missing or unreadable reads as an empty
+    /// list: the app opens clean rather than refusing to open.
     public func load() -> [T] {
-        guard let data = try? Data(contentsOf: url) else { return [] }
+        let data: Data?
+        switch place {
+        case .file(let url):
+            data = try? Data(contentsOf: url)
+        case .defaults(let key, let suite, _):
+            data = Self.defaults(suite)?.data(forKey: key)
+        }
+        guard let data else { return [] }
         return (try? Self.decoder.decode([T].self, from: data)) ?? []
     }
 
@@ -42,11 +68,36 @@ public final class JSONStore<T: Codable & Sendable>: Sendable {
     }
 
     private func write(_ list: [T]) {
-        guard let data = try? Self.encoder.encode(list) else { return }
-        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        // Written beside the file and moved over it, so a crash halfway
-        // through cannot leave half a file behind.
-        try? data.write(to: url, options: .atomic)
+        switch place {
+        case .file(let url):
+            guard let data = try? Self.encoder.encode(list) else { return }
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            // Written beside the file and moved over it, so a crash halfway
+            // through cannot leave half a file behind.
+            try? data.write(to: url, options: .atomic)
+        case .defaults(let key, let suite, let budget):
+            guard let data = Self.fit(list, in: budget) else { return }
+            Self.defaults(suite)?.set(data, forKey: key)
+        }
+    }
+
+    /// The list encoded in at most budget bytes, leaving out as many of its
+    /// last entries, the oldest, as it takes.
+    static func fit(_ list: [T], in budget: Int) -> Data? {
+        var list = list[...]
+        while true {
+            guard let data = try? encoder.encode(Array(list)) else { return nil }
+            if data.count <= budget || list.isEmpty {
+                return data
+            }
+            // About the share that is over, and at least one.
+            list = list.dropLast(max(1, list.count * (data.count - budget) / data.count))
+        }
+    }
+
+    private static func defaults(_ suite: String?) -> UserDefaults? {
+        guard let suite else { return .standard }
+        return UserDefaults(suiteName: suite)
     }
 
     // Dates as Go writes them (RFC 3339 with fractions), so the files read
@@ -152,7 +203,8 @@ public struct Watch: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
-/// History keeps the series watched, the latest first, in history.json.
+/// History keeps the series watched, the latest first, in history.json,
+/// or in a store of its own.
 @MainActor @Observable
 public final class History {
     /// How many series the history keeps.
@@ -161,8 +213,12 @@ public final class History {
     public private(set) var list: [Watch]
     @ObservationIgnored let store: JSONStore<Watch>
 
-    public init(dir: URL) {
-        store = JSONStore(url: dir.appendingPathComponent("history.json"))
+    public convenience init(dir: URL) {
+        self.init(store: JSONStore(url: dir.appendingPathComponent("history.json")))
+    }
+
+    public init(store: JSONStore<Watch>) {
+        self.store = store
         list = store.load()
     }
 
@@ -234,15 +290,19 @@ public struct Fav: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
-/// Favorites keeps the series saved, the latest first, in favorites.json.
+/// Favorites keeps the series saved, the latest first, in favorites.json,
+/// or in a store of its own.
 @MainActor @Observable
 public final class Favorites {
     public private(set) var list: [Fav]
     @ObservationIgnored private var ids: Set<String>
     @ObservationIgnored let store: JSONStore<Fav>
 
-    public init(dir: URL) {
-        let store = JSONStore<Fav>(url: dir.appendingPathComponent("favorites.json"))
+    public convenience init(dir: URL) {
+        self.init(store: JSONStore(url: dir.appendingPathComponent("favorites.json")))
+    }
+
+    public init(store: JSONStore<Fav>) {
         let list = store.load()
         self.store = store
         self.list = list
