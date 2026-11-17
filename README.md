@@ -6,12 +6,12 @@
 
 <p align="center">
   <b>无广告、不烧心</b><br>
-  红果短剧的极简 iPhone / iPad 客户端
+  红果短剧的极简 iPhone / iPad / Apple TV 客户端
 </p>
 
 ![iPhone 上的推荐、剧集详情和播放](docs/screenshots/iphone.webp)
 
-开心果 iOS 是 [开心果](https://github.com/kadaliao/kaixinguo)（macOS）的 iPhone 和 iPad 版：没有广告、没有弹窗，打开就是剧。界面用 SwiftUI 写成，播放用系统播放器，支持画中画和锁屏控制。
+开心果 iOS 是 [开心果](https://github.com/kadaliao/kaixinguo)（macOS）的 iPhone、iPad 和 Apple TV 版：没有广告、没有弹窗，打开就是剧。界面用 SwiftUI 写成，播放用系统播放器，支持画中画和锁屏控制。
 
 ## 功能
 
@@ -28,6 +28,7 @@
 - **画中画**：播放时回到主屏幕，视频缩到小窗里继续放；在小窗里点还原，回到播放页
 - **锁屏和控制中心**：显示剧名、集数和封面，可以暂停、拖动、换集
 - **iPad**：侧栏或顶部标签栏随意切换，播放页右边是选集面板，支持外接键盘
+- **Apple TV**：用遥控器浏览推荐、排行榜、新剧、我的和搜索；播放用系统播放器，有弹幕，控制栏里调倍速、清晰度、定时关闭，往下滑是选集
 - 跟随系统的浅色和深色外观
 
 ![iPad 上的剧集详情和播放](docs/screenshots/ipad.webp)
@@ -47,8 +48,9 @@
    ```
 
 3. 在 Kaixinguo target 的 Signing & Capabilities 里选择自己的开发团队（工程里默认是维护者的团队），连上 iPhone 或 iPad，点运行。
+4. 装到 Apple TV 上：先在 Xcode 的 Window › Devices and Simulators 里配对 Apple TV，再在 KaixinguoTV target 里同样选好开发团队，选 KaixinguoTV scheme 运行。
 
-需要 iOS / iPadOS 18 或更高版本。第一次打开工程时，Xcode 会从 GitHub 下载 openhongguo 的 Swift 包（约 17 MB）。用免费的 Apple ID 签名的应用 7 天后需要重新安装。
+需要 iOS / iPadOS / tvOS 18 或更高版本。第一次打开工程时，Xcode 会从 GitHub 下载 openhongguo 的 Swift 包（约 17 MB）。用免费的 Apple ID 签名的应用 7 天后需要重新安装。
 
 ## 使用
 
@@ -68,6 +70,16 @@
 | 锁定后按住画面再上滑 | 取消 2 倍速，恢复原来的倍速 |
 | 横过来 | iPhone 横屏时只显示视频 |
 | 横屏的剧，点播放页顶部倍速旁边的旋转按钮 | iPhone 上不转手机也能横屏看，再点回到竖屏；锁了竖屏方向也管用 |
+
+Apple TV 上：
+
+| 遥控器 | 作用 |
+| --- | --- |
+| 在海报上按住确认键 | 收藏 / 取消收藏 |
+| 在「最近观看」里的剧上按住确认键 | 继续播放，或从最近观看中移除 |
+| 播放时按一下确认键 | 显示控制栏，右边是倍速、清晰度、定时关闭和弹幕开关 |
+| 控制栏显示时往下滑 | 简介和选集，选集里有上一集、下一集、收藏和选季 |
+| 返回键 | 收起控制栏，再按一次退出播放 |
 
 iPad 接上键盘时：
 
@@ -97,6 +109,8 @@ iPad 接上键盘时：
 | 匿名设备 | `Library/Application Support/openhongguo/anonymous.json`，不参与 iCloud 备份 |
 | 封面和推荐缓存 | `Library/Caches/` |
 
+Apple TV 上应用不能在 `Library/Application Support` 里存文件，观看记录、收藏和上次的位置存在 UserDefaults 里，匿名设备在 `Library/Caches/openhongguo/anonymous.json`。
+
 ## 常见问题
 
 **第一次打开，列表很久才出来？**
@@ -109,7 +123,7 @@ iPad 接上键盘时：
 那一集需要登录红果账号才能看，开心果不提供登录。
 
 **能投屏到 Apple TV 吗？**
-视频是在手机上边下边解密的，Apple TV 拿不到解密后的地址，所以 AirPlay 只能用控制中心的「屏幕镜像」。
+视频是在手机上边下边解密的，Apple TV 拿不到解密后的地址，所以 AirPlay 只能用控制中心的「屏幕镜像」。想在电视上看，直接装 Apple TV 版（见「安装」）。
 
 **加载失败或者播放卡住？**
 在 Xcode 里编辑 Kaixinguo scheme，在 Run › Arguments › Environment Variables 里加上 `KX_DEBUG=1`，再从 Xcode 运行，控制台会打印每个请求，提 issue 时附上。
@@ -121,6 +135,8 @@ xcodegen                          # 改了 project.yml、增删了文件之后�
 (cd KaixinguoKit && swift test)   # 逻辑测试：在 Mac 上直接跑，不需要模拟器和网络
 xcodebuild test -project Kaixinguo.xcodeproj -scheme Kaixinguo \
   -destination 'platform=iOS Simulator,name=iPhone Air'   # 界面冒烟测试，需要网络
+xcodebuild test -project Kaixinguo.xcodeproj -scheme KaixinguoTV \
+  -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'   # Apple TV 版用遥控器走一遍，需要网络
 ```
 
 动手之前先读 [docs/architecture.md](docs/architecture.md) 和 [CONTRIBUTING.md](CONTRIBUTING.md)。发到 TestFlight 的流程见 [docs/releasing.md](docs/releasing.md)。
