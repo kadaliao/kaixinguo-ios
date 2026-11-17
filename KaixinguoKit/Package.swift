@@ -11,9 +11,12 @@ let package = Package(
         .library(name: "KaixinguoKit", targets: ["KaixinguoKit"]),
     ],
     dependencies: [
-        // 0.3.0 is the first release with the real x-argus / x-ladon
-        // signatures playback needs since 2026-11-10 and the danmaku API.
-        .package(url: "https://github.com/beilunyang/openhongguo.git", from: "0.3.0"),
+        // Our fork until beilunyang/openhongguo#13 is released: v0.3.0 (the
+        // x-argus / x-ladon signatures and the danmaku API) plus the V5
+        // playback protocol anonymous devices need since the old video_model
+        // endpoint stopped answering them in November 2026. Move back to
+        // upstream once it ships the fix.
+        .package(url: "https://github.com/kadaliao/openhongguo.git", exact: "0.3.1-kx.1"),
     ],
     targets: [
         .target(name: "CENC"),
