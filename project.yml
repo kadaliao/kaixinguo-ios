@@ -91,6 +91,18 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.kadaliao.kaixinguo.uitests
         GENERATE_INFOPLIST_FILE: YES
         TEST_TARGET_NAME: Kaixinguo
+  KaixinguoTVUITests:
+    type: bundle.ui-testing
+    platform: tvOS
+    sources:
+      - path: KaixinguoTVUITests
+    dependencies:
+      - target: KaixinguoTV
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kadaliao.kaixinguo.tvuitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: KaixinguoTV
 schemes:
   Kaixinguo:
     build:
@@ -107,6 +119,9 @@ schemes:
     build:
       targets:
         KaixinguoTV: all
+    test:
+      targets:
+        - KaixinguoTVUITests
     run:
       config: Debug
     archive:

@@ -126,23 +126,6 @@ extension EnvironmentValues {
     @Entry var playCard: PlayCard?
 }
 
-/// RankBadge is a series' place on a chart, the first three in medal
-/// colors.
-struct RankBadge: View {
-    let rank: Int
-
-    var body: some View {
-        let colors: [Color] = [Color(red: 0.95, green: 0.68, blue: 0.13), Color(white: 0.62), Color(red: 0.76, green: 0.47, blue: 0.27)]
-        Text("\(rank)")
-            .font(.caption.weight(.heavy))
-            .monospacedDigit()
-            .foregroundStyle(.white)
-            .padding(.horizontal, 6)
-            .frame(minWidth: 22, minHeight: 20)
-            .background(rank <= 3 ? colors[rank - 1] : .black.opacity(0.55), in: RoundedRectangle(cornerRadius: 6))
-    }
-}
-
 /// Chip is a capsule that chooses one of a few, as a chart or a day.
 struct Chip: View {
     let label: String

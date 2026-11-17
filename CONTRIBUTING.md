@@ -33,7 +33,7 @@ xcodebuild build -project Kaixinguo.xcodeproj -scheme KaixinguoTV \
 
 改了 KaixinguoKit 或 `Shared/` 的话，两个 App 都会受影响，iOS 和 Apple TV 都要编一遍。
 
-改了界面的话，在 iPhone 和 iPad 模拟器上都实际点一遍，浅色和深色外观都看看；改了播放，再跑一次 `xcodebuild test`（界面冒烟测试）和 `KX_ONLINE=1 swift test --filter playsOnline`。
+改了界面的话，在 iPhone 和 iPad 模拟器上都实际点一遍，浅色和深色外观都看看；改了播放，再跑一次 `xcodebuild test`（界面冒烟测试）和 `KX_ONLINE=1 swift test --filter playsOnline`。改了 Apple TV 版，跑一次 `-scheme KaixinguoTV` 的 `xcodebuild test`，它用虚拟遥控器走一遍主要流程，见 [docs/architecture.md](docs/architecture.md) 的「测试」一节。
 
 ## 代码约定
 

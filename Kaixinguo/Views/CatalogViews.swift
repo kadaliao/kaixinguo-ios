@@ -138,11 +138,7 @@ struct HotView: View {
                                 .font(.title3.bold())
                                 .padding(.horizontal, 16)
                                 .padding(.top, 12)
-                            CardGrid(cards: b.items.map { it in
-                                Card(id: it.seriesId, title: it.title, cover: it.coverUrl,
-                                     sub: it.searchScore.isEmpty ? it.heat : it.searchScore,
-                                     rank: it.position, episodes: it.episodeCount)
-                            })
+                            CardGrid(cards: b.items.map(Card.init(hot:)))
                         }
                     }
                 }

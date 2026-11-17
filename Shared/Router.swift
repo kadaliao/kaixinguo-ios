@@ -85,3 +85,62 @@ extension Router {
         searchQuery = s.searchQuery
     }
 }
+
+extension Router {
+    /// Saves where the viewer is each time it changes, so the next launch
+    /// opens there again: the pages, and the episode, even as picture in
+    /// picture goes on to the next one with the app in the background.
+    func keep(_ model: AppModel) {
+        let s = withObservationTracking {
+            session(model)
+        } onChange: {
+            Task { @MainActor in self.keep(model) }
+        }
+        model.save(s)
+    }
+
+    /// Whether to open as on the first launch, rather than where the last
+    /// one left off: for the interface tests, and for screenshots, which
+    /// open a link of their own.
+    static var launchFresh: Bool {
+        #if DEBUG
+        let d = UserDefaults.standard
+        return d.bool(forKey: "KXFresh") || d.string(forKey: "KXOpen") != nil
+        #else
+        false
+        #endif
+    }
+
+    /// Opens a link: kaixinguo://series/<id>, kaixinguo://play/<id>?episode=<n>,
+    /// kaixinguo://search?q=<words>, or a tab, as kaixinguo://rank.
+    func openLink(_ url: URL, _ model: AppModel) {
+        guard url.scheme == "kaixinguo" else { return }
+        let id = url.pathComponents.dropFirst().first
+        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        // A link to a page shows it, rather than the player the app may
+        // have opened again over it, where it was left.
+        if url.host() != "play" && model.player.isPresented {
+            model.player.leave()
+        }
+        switch url.host() {
+        case "series":
+            if let id { open(.series(id)) }
+        case "play":
+            guard let id else { return }
+            if let n = query.first(where: { $0.name == "episode" })?.value.flatMap(Int.init) {
+                model.player.play(id, n)
+            } else {
+                model.playSeason(id)
+            }
+        case "discover": tab = .discover
+        case "rank": tab = .rank
+        case "new": tab = .new
+        case "mine": tab = .mine
+        case "search":
+            tab = .search
+            if let q = query.first(where: { $0.name == "q" })?.value { search(q) }
+        default:
+            break
+        }
+    }
+}
