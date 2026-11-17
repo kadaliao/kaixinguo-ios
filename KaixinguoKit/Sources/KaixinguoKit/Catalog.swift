@@ -21,14 +21,15 @@ public protocol Catalog: Sendable {
 extension OpenhongguoClient: Catalog {}
 
 extension OpenhongguoClient {
-    /// The client the app uses, its anonymous device kept in Application
-    /// Support. KX_DEBUG in the environment logs each request.
-    public static func app() throws -> OpenhongguoClient {
+    /// The client the app uses, its anonymous device kept in profile, or
+    /// in Application Support when nil. KX_DEBUG in the environment logs
+    /// each request.
+    public static func app(profile: URL? = nil) throws -> OpenhongguoClient {
         var options = ClientOptions(retryAttempts: 3, deviceResets: 3)
         if ProcessInfo.processInfo.environment["KX_DEBUG"] != nil {
             options.logger = { print("sdk:", $0) }
         }
-        return try create(options: options)
+        return try create(profile: profile, options: options)
     }
 }
 

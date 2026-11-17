@@ -142,7 +142,7 @@ App 退出或被系统关掉后再打开，回到上次的样子。`Session` 记
 | `Caches/home.json` | 推荐页第一页 | `AppModel` |
 | `Caches/covers/` | 封面 JPEG | `CoverStore` |
 
-Apple TV 版的观看记录和收藏不在文件里，在 UserDefaults 里，见「Apple TV」一节。
+Apple TV 版不用 Application Support：观看记录和收藏在 UserDefaults 里，匿名设备在 `Caches/openhongguo/anonymous.json`，见「Apple TV」一节。
 
 `history.json` 和 `favorites.json` 的格式与 macOS 版相同（字段名一样，时间是 RFC 3339），两边的文件可以互相读。`JSONStore` 的规则也一样：
 
@@ -164,7 +164,10 @@ Apple TV 版的观看记录和收藏不在文件里，在 UserDefaults 里，见
 - 播放用系统的 `AVPlayerViewController`，**留着它自带的控件**：遥控器拖进度、暂停、下滑看信息面板都是现成的。iOS 版的手势、旋转、长按倍速在电视上都用不上。信息面板里的剧名、集数和封面来自 `Player` 设置的 `externalMetadata`，和 iOS 锁屏用的是同一份。
 - 下一集靠 `contextualActions` 在播放画面上放一个「下一集」按钮；一集放完照样自动连播。
 - openhongguo 的 xcframework 从 fork 的 `v0.3.1-kx.2` 起才有 tvOS 部分。官方 gomobile 编不了 tvOS，这两个部分是 fork 里的 `bindings/mobile/add-tvos.sh` 用 sagernet 的 gomobile 编出来再合进去的。
-- **观看记录和收藏存在 UserDefaults 里**。存储空间紧张时，tvOS 可能删掉 App 的任何文件，Application Support 也不例外；只有 UserDefaults 里 500 KB 以内的数据一定留着。所以 `AppModel.live()` 在 tvOS 上把 `History` 和 `Favorites` 放进 UserDefaults 的 `history`、`favorites` 两个键，各给 200 KB。一部剧的记录约 0.5 KB，200 部也只有 100 KB 左右，上限只是兜底。SDK 的匿名设备、首页缓存和封面仍然是文件，被删了也只是重新注册、重新下载。
+- **不碰 Application Support**。Apple TV 上的 App 只能往 `Caches` 和 `tmp` 里写文件，建 `Library/Application Support` 会被拒（「你没有将文件“Application Support”存储到文件夹“Library”中的权限」），App 一启动就打不开。模拟器不拦，只有真机才会出这个错。这两个目录在存储空间紧张时还会被系统清空，只有 UserDefaults 里 500 KB 以内的数据一定留着。所以 `AppModel.live()` 在 tvOS 上：
+  - 把 `History`、`Favorites` 和会话放进 UserDefaults 的 `history`、`favorites`、`session` 三个键，前两个各给 200 KB。一部剧的记录约 0.5 KB，200 部也只有 100 KB 左右，上限只是兜底。
+  - 把 SDK 的匿名设备放在 `Caches/openhongguo/anonymous.json`（`OpenhongguoClient.app(profile:)`）。SDK 默认放在 Application Support，在电视上建不了。
+  - 首页缓存和封面本来就在 `Caches` 里。这些文件被清掉了，也只是重新注册设备、重新下载。
 - **图标**是分层的 5:3 横版：后层是渐变底和壳的阴影，中层是果壳，前层是播放键，焦点移上去时各层错开。顶部货架是一张开心果加「开心果 / 无广告、不烧心」的横幅。这些都由 `scripts/tv-icons.py` 从 `resources/icon.svg` 里同样的形状画出来，改图标后重跑一次就行（需要 `rsvg-convert` 和 ImageMagick）。
 - 隐私清单 `Shared/PrivacyInfo.xcprivacy` 两个 App 共用。
 

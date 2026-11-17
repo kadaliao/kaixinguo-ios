@@ -39,17 +39,18 @@ public final class AppModel {
 
     public convenience init(catalog: any Catalog, dataDir: URL, cacheDir: URL) {
         self.init(catalog: catalog, history: History(dir: dataDir), favorites: Favorites(dir: dataDir),
-                  dataDir: dataDir, cacheDir: cacheDir)
+                  sessions: JSONStore(url: dataDir.appendingPathComponent("session.json")), cacheDir: cacheDir)
     }
 
-    /// A model whose history and favorites are kept somewhere other than
-    /// files in dataDir, as on tvOS.
-    public init(catalog: any Catalog, history: History, favorites: Favorites, dataDir: URL, cacheDir: URL) {
+    /// A model whose history, favorites and session are kept somewhere
+    /// other than files in one directory, as on tvOS.
+    public init(catalog: any Catalog, history: History, favorites: Favorites, sessions: JSONStore<Session>,
+                cacheDir: URL) {
         self.catalog = catalog
         self.cacheDir = cacheDir
         self.history = history
         self.favorites = favorites
-        sessions = JSONStore(url: dataDir.appendingPathComponent("session.json"))
+        self.sessions = sessions
         covers = CoverStore(dir: cacheDir.appendingPathComponent("covers"))
         home = Feed(fetch: Self.discover(catalog))
         _player = Player(app: self)
@@ -65,18 +66,23 @@ public final class AppModel {
     /// The app's own model, its files where the system keeps an app's data.
     public static func live() throws -> AppModel {
         let fm = FileManager.default
-        let data = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         let cache = try fm.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         #if os(tvOS)
-        // tvOS may delete any of an app's files, Application Support too,
-        // when storage runs low; only its defaults, up to 500 KB, stay for
-        // sure. The history and favorites go there: at a few hundred bytes
-        // a series, 200 KB each holds hundreds.
-        return AppModel(catalog: try OpenhongguoClient.app(),
+        // An Apple TV app may write only in Caches and tmp, not Application
+        // Support (the simulator lets it, a real Apple TV refuses), and
+        // the system empties them when storage runs low. Only its
+        // defaults, up to 500 KB, stay for sure, so the history, favorites
+        // and session go there: at a few hundred bytes a series, 200 KB
+        // each holds hundreds. The anonymous device goes in Caches; once
+        // it is gone, the next request registers another.
+        let device = cache.appendingPathComponent("openhongguo/anonymous.json")
+        return AppModel(catalog: try OpenhongguoClient.app(profile: device),
                         history: History(store: JSONStore(.defaults(key: "history", budget: 200_000))),
                         favorites: Favorites(store: JSONStore(.defaults(key: "favorites", budget: 200_000))),
-                        dataDir: data, cacheDir: cache)
+                        sessions: JSONStore(.defaults(key: "session", budget: 10_000)),
+                        cacheDir: cache)
         #else
+        let data = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         return AppModel(catalog: try OpenhongguoClient.app(), dataDir: data, cacheDir: cache)
         #endif
     }
