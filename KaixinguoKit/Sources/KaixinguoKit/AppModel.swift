@@ -37,11 +37,18 @@ public final class AppModel {
     @ObservationIgnored let sessions: JSONStore<Session>
     @ObservationIgnored var savedSession: Session?
 
-    public init(catalog: any Catalog, dataDir: URL, cacheDir: URL) {
+    public convenience init(catalog: any Catalog, dataDir: URL, cacheDir: URL) {
+        self.init(catalog: catalog, history: History(dir: dataDir), favorites: Favorites(dir: dataDir),
+                  dataDir: dataDir, cacheDir: cacheDir)
+    }
+
+    /// A model whose history and favorites are kept somewhere other than
+    /// files in dataDir, as on tvOS.
+    public init(catalog: any Catalog, history: History, favorites: Favorites, dataDir: URL, cacheDir: URL) {
         self.catalog = catalog
         self.cacheDir = cacheDir
-        history = History(dir: dataDir)
-        favorites = Favorites(dir: dataDir)
+        self.history = history
+        self.favorites = favorites
         sessions = JSONStore(url: dataDir.appendingPathComponent("session.json"))
         covers = CoverStore(dir: cacheDir.appendingPathComponent("covers"))
         home = Feed(fetch: Self.discover(catalog))
@@ -55,12 +62,23 @@ public final class AppModel {
         home.onPage = { [unowned self] _ in saveHomeCache(home.cards) }
     }
 
-    /// The app's own model, its files where iOS keeps an app's data.
+    /// The app's own model, its files where the system keeps an app's data.
     public static func live() throws -> AppModel {
         let fm = FileManager.default
         let data = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         let cache = try fm.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        #if os(tvOS)
+        // tvOS may delete any of an app's files, Application Support too,
+        // when storage runs low; only its defaults, up to 500 KB, stay for
+        // sure. The history and favorites go there: at a few hundred bytes
+        // a series, 200 KB each holds hundreds.
+        return AppModel(catalog: try OpenhongguoClient.app(),
+                        history: History(store: JSONStore(.defaults(key: "history", budget: 200_000))),
+                        favorites: Favorites(store: JSONStore(.defaults(key: "favorites", budget: 200_000))),
+                        dataDir: data, cacheDir: cache)
+        #else
         return AppModel(catalog: try OpenhongguoClient.app(), dataDir: data, cacheDir: cache)
+        #endif
     }
 
     /// Writes what is waiting to be saved, as the app leaves the screen.

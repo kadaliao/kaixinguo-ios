@@ -373,6 +373,32 @@ func numbersSeasons(input: [Season], want: String) {
     #expect(abs(updated.timeIntervalSince1970 - 1_793_865_723.123) < 0.01)
 }
 
+/// On tvOS the history and favorites live in the user defaults, within a
+/// budget: what doesn't fit is the oldest, at the end, which goes.
+@MainActor @Test func historyInDefaultsKeepsToItsBudget() throws {
+    let suite = "kxg-\(UUID().uuidString)"
+    defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+    let place = JSONStore<Watch>.Place.defaults(key: "history", suite: suite, budget: 2_000)
+    let h = History(store: JSONStore(place))
+    #expect(h.list.isEmpty)
+    for i in 1...20 {
+        h.record(Watch(seriesID: "\(i)", title: "第 \(i) 部", episode: 1, position: 3))
+    }
+    h.flush()
+
+    let data = try #require(UserDefaults(suiteName: suite)?.data(forKey: "history"))
+    #expect(data.count <= 2_000)
+    let again = History(store: JSONStore(place))
+    #expect(again.list.count > 5 && again.list.count < 20)
+    #expect(again.list.map(\.seriesID) == h.list.prefix(again.list.count).map(\.seriesID))
+    #expect(again.get("20")?.position == 3) // the latest stays
+
+    let f = Favorites(store: JSONStore(.defaults(key: "favorites", suite: suite, budget: 2_000)))
+    f.add(Fav(seriesID: "9", title: "收藏的剧"))
+    f.flush()
+    #expect(Favorites(store: JSONStore(.defaults(key: "favorites", suite: suite, budget: 2_000))).has("9"))
+}
+
 /// The episodes watched add up as the viewer goes on, and a later record
 /// that doesn't mention them keeps them.
 @MainActor @Test func historyKeepsWatchedEpisodes() {
@@ -517,7 +543,7 @@ func numbersSeasons(input: [Season], want: String) {
     #expect(model.player.number == 5)
     #expect(model.player.start == 0)
 
-    let url = model.sessions.url
+    let url = try #require(model.sessions.url)
     try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     try Data(#"[{"tab":"mine"}]"#.utf8).write(to: url)
     #expect(model.lastSession()?.tab == "mine")
