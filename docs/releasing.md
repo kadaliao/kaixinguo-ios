@@ -34,7 +34,7 @@
    ```
 
    脚本依次归档、导出、上传，然后交给 `scripts/beta-review.sh`：等 Apple 处理完构建（5 到 15 分钟），填好「测试内容」，加进「朋友」，提交 TestFlight 审核。签名用 Xcode 的自动签名，证书和描述文件由 API 密钥按需生成。
-4. 处理完以后，内部测试员不用审核就能安装。外部测试员（公开链接）要等审核通过，一般一天以内；同一个版本号后面的构建，审核通常更快。中途断了，或者想重新填「测试内容」，就再运行一次 `scripts/beta-review.sh`，已经做完的步骤会跳过。
+4. 处理完以后，内部测试员不用审核就能安装。外部测试员（公开链接）要等审核通过，一般一天以内；同一个版本号后面的构建，审核通常更快。中途断了，或者想重新填「测试内容」，就再运行一次 `scripts/beta-review.sh`，已经做完的步骤会跳过。同一个版本号同一时间只能有一个构建在审：上一个构建还没审完时，提交审核这一步会报 `ANOTHER_BUILD_IN_REVIEW`。这时要么等它审完，要么在 App Store Connect 里让它过期，然后运行 `scripts/beta-review.sh <版本号> <构建号>` 重新提交。
 5. 提交，打上标签：`git tag v<版本号> && git push --tags`。
 6. 在 GitHub 上建 Release，说明就是 `CHANGELOG.md` 里这个版本的那一节：`gh release create v<版本号> --verify-tag --title <版本号> --notes-file <这一节的内容>`。
 
