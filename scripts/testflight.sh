@@ -12,6 +12,8 @@
 #
 # Every upload needs a build number above the last one: raise
 # CURRENT_PROJECT_VERSION in project.yml, or pass BUILD_NUMBER=<n>.
+#
+# PLATFORM=tvOS uploads the Apple TV app instead of the iPhone and iPad one.
 set -eu
 : "${ASC_KEY_ID:?set ASC_KEY_ID to the App Store Connect API key ID}"
 : "${ASC_ISSUER_ID:?set ASC_ISSUER_ID to the API key issuer ID}"
@@ -20,6 +22,19 @@ key=${ASC_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8}
 
 here=$(cd "$(dirname "$0")/.." && pwd)
 out=$here/build/release
+unsigned=
+case ${PLATFORM:=iOS} in
+iOS) scheme=Kaixinguo altool_type=ios ;;
+tvOS)
+	scheme=KaixinguoTV altool_type=appletvos
+	# Signing the archive takes a development profile, and that takes an
+	# Apple TV registered to the team. Without one, the archive goes
+	# unsigned and the export signs it for the App Store, which needs none.
+	unsigned=CODE_SIGNING_ALLOWED=NO
+	;;
+*) echo "PLATFORM is iOS or tvOS" >&2; exit 2 ;;
+esac
+export PLATFORM
 auth="-allowProvisioningUpdates -authenticationKeyPath $key -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
 build=${BUILD_NUMBER:+CURRENT_PROJECT_VERSION=$BUILD_NUMBER}
 
@@ -29,8 +44,8 @@ mkdir -p "$out"
 
 echo "[1/3] 归档"
 # shellcheck disable=SC2086 # auth and build are lists of words
-xcodebuild archive -project "$here/Kaixinguo.xcodeproj" -scheme Kaixinguo -configuration Release \
-	-destination 'generic/platform=iOS' -archivePath "$out/Kaixinguo.xcarchive" $auth $build -quiet
+xcodebuild archive -project "$here/Kaixinguo.xcodeproj" -scheme "$scheme" -configuration Release \
+	-destination "generic/platform=$PLATFORM" -archivePath "$out/$scheme.xcarchive" $auth $build $unsigned -quiet
 
 echo "[2/3] 导出"
 cat >"$out/ExportOptions.plist" <<'PLIST'
@@ -50,12 +65,12 @@ cat >"$out/ExportOptions.plist" <<'PLIST'
 </plist>
 PLIST
 # shellcheck disable=SC2086
-xcodebuild -exportArchive -archivePath "$out/Kaixinguo.xcarchive" -exportPath "$out/export" \
+xcodebuild -exportArchive -archivePath "$out/$scheme.xcarchive" -exportPath "$out/export" \
 	-exportOptionsPlist "$out/ExportOptions.plist" $auth -quiet
 
 echo "[3/3] 上传"
-xcrun altool --upload-app -f "$out/export/Kaixinguo.ipa" -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
-plist=$out/Kaixinguo.xcarchive/Info.plist
+xcrun altool --upload-app -f "$out/export/$scheme.ipa" -t "$altool_type" --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+plist=$out/$scheme.xcarchive/Info.plist
 version=$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleShortVersionString' "$plist")
 number=$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleVersion' "$plist")
 echo "已上传 $version ($number)，内部测试组处理完就能装"
