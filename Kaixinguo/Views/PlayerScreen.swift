@@ -92,7 +92,10 @@ private struct VideoArea: View {
             PlayerControllerView(player: model.player)
                 .offset(y: PlayerHost.shared.hud.offset)
                 .ignoresSafeArea(edges: landscape ? .all : .top)
-            DanmakuLayer()
+            DanmakuLayer(size: 16, pitch: 28)
+                .padding(.top, 48) // below the top bar
+                .ignoresSafeArea(edges: .horizontal)
+                .offset(y: PlayerHost.shared.hud.offset)
             PauseMark()
             PlayerOverlay()
             VStack(spacing: 0) {
@@ -144,57 +147,6 @@ private struct PlayerOverlay: View {
             }
         default:
             EmptyView()
-        }
-    }
-}
-
-/// Where the viewer's choice to show danmaku or not is kept.
-private let danmakuKey = "danmaku"
-
-/// DanmakuLayer flies the episode's danmaku across the top of the video,
-/// white with a dark edge, each where the time the video has got to puts
-/// it: they stand still while it pauses, follow a seek, and go along with a
-/// swipe. Picture in picture shows the video alone.
-private struct DanmakuLayer: View {
-    @Environment(AppModel.self) private var model
-    @AppStorage(danmakuKey) private var on = true
-    /// The size of their type, and the distance from one lane to the next.
-    private let size: CGFloat = 16, pitch: CGFloat = 28
-
-    var body: some View {
-        let player = model.player
-        if on, player.state == .playing || player.state == .buffering,
-           let flights = player.danmaku()?.flights, !flights.isEmpty {
-            let av = player.av, size = size, pitch = pitch
-            TimelineView(.animation(minimumInterval: player.paused ? 0.25 : 1.0 / 60)) { _ in
-                let t = av.currentTime().seconds
-                Canvas { ctx, canvas in
-                    guard t.isFinite else { return }
-                    let across = Double(canvas.width / size)
-                    let edge = [CGPoint(x: -1, y: 0), CGPoint(x: 1, y: 0), CGPoint(x: 0, y: -1), CGPoint(x: 0, y: 1)]
-                    for f in flights {
-                        guard let x = f.x(at: t, across: across) else { continue }
-                        var text = ctx.resolve(Text(verbatim: f.text).font(.system(size: size, weight: .semibold)))
-                        let at = CGPoint(x: CGFloat(x) * size, y: (CGFloat(f.lane) + 0.5) * pitch)
-                        guard at.x + text.measure(in: CGSize(width: CGFloat.infinity, height: CGFloat.infinity)).width > 0 else {
-                            continue
-                        }
-                        text.shading = .color(.black.opacity(0.75))
-                        for d in edge {
-                            ctx.draw(text, at: CGPoint(x: at.x + d.x, y: at.y + d.y), anchor: .leading)
-                        }
-                        text.shading = .color(.white)
-                        ctx.draw(text, at: at, anchor: .leading)
-                    }
-                }
-            }
-            .frame(height: pitch * CGFloat(DanmakuFlight.lanes))
-            .frame(maxHeight: .infinity, alignment: .top)
-            .padding(.top, 48) // below the top bar
-            .ignoresSafeArea(edges: .horizontal)
-            .offset(y: PlayerHost.shared.hud.offset)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
         }
     }
 }
@@ -351,7 +303,7 @@ private struct SpeedPicker: View {
         let player = model.player
         Picker("倍速", selection: Binding(get: { player.speed }, set: { player.setSpeed($0) })) {
             ForEach(Player.speeds.reversed(), id: \.self) { s in
-                Text(s == 1 ? "1x 正常" : "\(rateText(s))x").tag(s)
+                Text(speedLabel(s)).tag(s)
             }
         }
     }
@@ -387,10 +339,8 @@ private struct MoreMenu: View {
             }
             Menu {
                 Picker("定时关闭", selection: Binding(get: { player.sleep }, set: { player.setSleep($0) })) {
-                    Text("不开启").tag(Player.Sleep.off)
-                    Text("播完本集").tag(Player.Sleep.endOfEpisode)
-                    ForEach([15, 30, 60, 90], id: \.self) { m in
-                        Text("\(m) 分钟").tag(Player.Sleep.minutes(m))
+                    ForEach(sleepChoices, id: \.0) { s, label in
+                        Text(label).tag(s)
                     }
                 }
             } label: {
@@ -418,16 +368,6 @@ private struct MoreMenu: View {
                 .contentShape(Rectangle())
         }
         .accessibilityLabel("更多")
-    }
-
-    /// When the sleep timer stops the video: "播完本集", "22:30 停止".
-    private func sleepLine(_ player: Player) -> String {
-        switch player.sleep {
-        case .off: "未开启"
-        case .endOfEpisode: "播完本集"
-        case .minutes:
-            (player.sleepAt?.formatted(date: .omitted, time: .shortened) ?? "") + " 停止"
-        }
     }
 }
 
@@ -504,11 +444,6 @@ private func clock(_ s: Double) -> String {
     guard s.isFinite, s > 0 else { return "0:00" }
     let n = Int(s)
     return String(format: "%d:%02d", n / 60, n % 60)
-}
-
-/// A speed as the player writes it: 1.25, 2.
-private func rateText(_ r: Float) -> String {
-    Double(r).formatted()
 }
 
 /// SpeedHint shows a press and hold on the video at work: double speed, and

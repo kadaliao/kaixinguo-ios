@@ -17,39 +17,15 @@ struct KaixinguoApp: App {
         _router = State(initialValue: router)
         do {
             let model = try AppModel.live()
-            if !Self.fresh, let s = model.lastSession() {
+            if !Router.launchFresh, let s = model.lastSession() {
                 router.restore(s)
                 model.restore(s)
             }
-            Self.keep(model, router)
+            router.keep(model)
             _model = State(initialValue: model)
         } catch {
             _startError = State(initialValue: error.localizedDescription)
         }
-    }
-
-    /// Saves where the viewer is each time it changes, so the next launch
-    /// opens there again: the pages, and the episode, even as picture in
-    /// picture goes on to the next one with the app in the background.
-    private static func keep(_ model: AppModel, _ router: Router) {
-        let s = withObservationTracking {
-            router.session(model)
-        } onChange: {
-            Task { @MainActor in keep(model, router) }
-        }
-        model.save(s)
-    }
-
-    /// Whether to open as on the first launch, rather than where the last
-    /// one left off: for the interface tests, and for screenshots, which
-    /// open a link of their own.
-    private static var fresh: Bool {
-        #if DEBUG
-        let d = UserDefaults.standard
-        return d.bool(forKey: "KXFresh") || d.string(forKey: "KXOpen") != nil
-        #else
-        false
-        #endif
     }
 
     var body: some Scene {
@@ -58,13 +34,13 @@ struct KaixinguoApp: App {
                 RootView()
                     .environment(model)
                     .environment(router)
-                    .onOpenURL { open($0, model) }
+                    .onOpenURL { router.openLink($0, model) }
                     #if DEBUG
                     // `-KXOpen kaixinguo://…` at launch opens the link, without the
                     // system asking first: how the screenshots get to each page.
                     .task {
                         if let link = UserDefaults.standard.string(forKey: "KXOpen"), let url = URL(string: link) {
-                            open(url, model)
+                            router.openLink(url, model)
                         }
                     }
                     #endif
@@ -87,39 +63,6 @@ struct KaixinguoApp: App {
                 Button("返回") { router.back() }
                     .keyboardShortcut("[")
             }
-        }
-    }
-
-    /// Opens a link: kaixinguo://series/<id>, kaixinguo://play/<id>?episode=<n>,
-    /// kaixinguo://search?q=<words>, or a tab, as kaixinguo://rank.
-    private func open(_ url: URL, _ model: AppModel) {
-        guard url.scheme == "kaixinguo" else { return }
-        let id = url.pathComponents.dropFirst().first
-        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-        // A link to a page shows it, rather than the player the app may
-        // have opened again over it, where it was left.
-        if url.host() != "play" && model.player.isPresented {
-            model.player.leave()
-        }
-        switch url.host() {
-        case "series":
-            if let id { router.open(.series(id)) }
-        case "play":
-            guard let id else { return }
-            if let n = query.first(where: { $0.name == "episode" })?.value.flatMap(Int.init) {
-                model.player.play(id, n)
-            } else {
-                model.playSeason(id)
-            }
-        case "discover": router.tab = .discover
-        case "rank": router.tab = .rank
-        case "new": router.tab = .new
-        case "mine": router.tab = .mine
-        case "search":
-            router.tab = .search
-            if let q = query.first(where: { $0.name == "q" })?.value { router.search(q) }
-        default:
-            break
         }
     }
 }

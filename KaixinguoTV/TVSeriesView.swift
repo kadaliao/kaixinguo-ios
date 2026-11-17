@@ -3,7 +3,7 @@ import Openhongguo
 import SwiftUI
 
 /// TVSeriesView is a series: its poster and what it is about, a button to
-/// play it, and its episodes.
+/// play it, its seasons and its episodes.
 struct TVSeriesView: View {
     let id: String
     @Environment(AppModel.self) private var model
@@ -32,6 +32,7 @@ private struct TVSeriesBody: View {
     @Bindable var sp: SeriesPage
     let series: Series
     @Environment(AppModel.self) private var model
+    @Environment(Router.self) private var router
 
     var body: some View {
         ScrollView {
@@ -92,6 +93,9 @@ private struct TVSeriesBody: View {
         let w = model.history.get(sp.id)
         let watched = Set(w?.watched ?? [])
         VStack(alignment: .leading, spacing: 28) {
+            // Another season shows in place of this one: Menu still leaves
+            // the series.
+            TVSeasonRow(sp: sp) { se in router.replaceTop(.series(se.seriesId)) }
             HStack(alignment: .firstTextBaseline, spacing: 20) {
                 Text("选集").font(.title3.bold())
                 Text("共 \(sp.episodes.count) 集").font(.callout).foregroundStyle(.secondary)
@@ -119,10 +123,28 @@ private struct TVSeriesBody: View {
     }
 }
 
-/// TVEpisodeButton is an episode's number to choose: tinted while it is
-/// the one the viewer is on, checked once watched, a lock for one that
-/// needs a login.
-private struct TVEpisodeButton: View {
+/// TVSeasonRow is the seasons of a series in several, this one chosen;
+/// seasons still to come show, but can't be chosen yet.
+struct TVSeasonRow: View {
+    let sp: SeriesPage
+    let choose: (Season) -> Void
+
+    var body: some View {
+        if let seasons = sp.seasons, seasons.count > 1 {
+            TVChipRow(selected: sp.id) {
+                ForEach(seasons, id: \.seriesId) { se in
+                    TVChip(label: seasonLabel(se), on: se.seriesId == sp.id, enabled: se.episodeCount > 0) { choose(se) }
+                        .id(se.seriesId)
+                }
+            }
+        }
+    }
+}
+
+/// TVEpisodeButton is an episode's number to choose: filled green while it
+/// is the one the viewer is on, faded and checked once watched, a lock for
+/// one that needs a login.
+struct TVEpisodeButton: View {
     let episode: Episode
     let current: Bool
     let watched: Bool
@@ -137,18 +159,20 @@ private struct TVEpisodeButton: View {
                     Image(systemName: "lock.fill")
                 }
             }
-            .frame(maxWidth: .infinity)
+            .opacity(watched && !current ? 0.55 : 1)
+            .frame(maxWidth: .infinity, minHeight: 72)
             .overlay(alignment: .topTrailing) {
                 if watched {
                     Image(systemName: "checkmark")
-                        .font(.caption2.weight(.heavy))
-                        .offset(x: 14, y: -10)
+                        .font(.system(size: 16, weight: .heavy))
+                        .padding(10)
                 }
             }
         }
-        .tint(current ? .accentColor : nil)
+        .buttonStyle(TVChoiceStyle(on: current, shape: RoundedRectangle(cornerRadius: 14, style: .continuous)))
         .disabled(!episode.playable)
         .accessibilityLabel("第 \(episode.number) 集")
         .accessibilityValue(watched ? "已看过" : "")
+        .accessibilityAddTraits(current ? .isSelected : [])
     }
 }
