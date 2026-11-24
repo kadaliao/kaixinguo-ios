@@ -11,12 +11,12 @@ let package = Package(
         .library(name: "KaixinguoKit", targets: ["KaixinguoKit"]),
     ],
     dependencies: [
-        // Our fork only for the tvOS slices the Apple TV app needs: 0.4.1-kx.1
-        // is upstream v0.4.1 (the signature the server takes since
-        // 2026-11-23, and the signing-service options) with tvOS added to
-        // its xcframework. Move back to beilunyang/openhongguo once
-        // upstream builds for tvOS.
-        .package(url: "https://github.com/kadaliao/openhongguo.git", exact: "0.4.1-kx.1"),
+        // Our fork: 0.4.1-kx.3 is upstream v0.4.1 with tvOS added to its
+        // xcframework (for the Apple TV app) and upstream's unmerged #16,
+        // which reads playback from video_tab when the playback endpoints
+        // come back empty for anonymous devices (since 2026-11-24). Move back
+        // to beilunyang/openhongguo once upstream ships both.
+        .package(url: "https://github.com/kadaliao/openhongguo.git", exact: "0.4.1-kx.3"),
     ],
     targets: [
         .target(name: "CENC"),
