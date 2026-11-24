@@ -22,12 +22,18 @@ extension OpenhongguoClient: Catalog {}
 
 extension OpenhongguoClient {
     /// The client the app uses, its anonymous device kept in profile, or
-    /// in Application Support when nil. KX_DEBUG in the environment logs
-    /// each request.
-    public static func app(profile: URL? = nil) throws -> OpenhongguoClient {
+    /// in Application Support when nil. It signs with the SDK's built-in
+    /// signing, or with the signing service signer when its URL is set.
+    /// KX_DEBUG in the environment logs each request.
+    public static func app(profile: URL? = nil, signer: SignerSettings = SignerSettings()) throws -> OpenhongguoClient {
         var options = ClientOptions(retryAttempts: 3, deviceResets: 3)
+        if !signer.url.isEmpty {
+            options.signerUrl = signer.url
+            options.signerToken = signer.token.isEmpty ? nil : signer.token
+        }
         if ProcessInfo.processInfo.environment["KX_DEBUG"] != nil {
-            options.logger = { print("sdk:", $0) }
+            let tag = signer.url.isEmpty ? "sdk:" : "sdk (signer):"
+            options.logger = { print(tag, $0) }
         }
         return try create(profile: profile, options: options)
     }
@@ -48,8 +54,10 @@ public func friendly(_ error: Error?) -> String {
             return "这一集需要登录才能观看"
         case .contentUnavailable, .albumUnavailable:
             return "内容已下架或不存在"
-        case .challengeRequired, .deviceRejected:
+        case .challengeRequired, .deviceRejected, .signatureRejected:
             return "服务器暂时拒绝了请求，请稍后再试"
+        case .signerUnavailable:
+            return "签名服务暂时连不上，请稍后再试"
         default:
             return e.message
         }

@@ -12,6 +12,7 @@
 		3FBE1BE3031D65D83EA123FB /* CatalogViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE9445CC718D3309FCFB9ED1 /* CatalogViews.swift */; };
 		4BB3792F847AB2AC6E22AFC3 /* TVPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F4DD386EF897517EF6151AC /* TVPlayerView.swift */; };
 		4F7613063A66B9ACD448D524 /* KaixinguoKit in Frameworks */ = {isa = PBXBuildFile; productRef = B92FEBF8BA5E736E0C2409A2 /* KaixinguoKit */; };
+		5EE6BD13D1A8597CB511034C /* SignerSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18E219E75881FBF83B31A466 /* SignerSettingsView.swift */; };
 		65AAF7A533D46990C3B95E58 /* Router.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6FBA63BEC52B9EE74A5C7C2 /* Router.swift */; };
 		71BC294FE5E177C5D56985CA /* TVSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27F97A272B150C33C5963771 /* TVSmokeTests.swift */; };
 		7AA9DA996D761D0AA33117F2 /* SharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0062DAF751D7B0D38655CED3 /* SharedViews.swift */; };
@@ -25,6 +26,7 @@
 		A6A003AD96B845E7DA6A2950 /* TVSeriesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A312149133AE793C0077BC60 /* TVSeriesView.swift */; };
 		B0496CDF70DD722E339E88AE /* KaixinguoTVApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA85AF22F1894BBFFDBDB2BC /* KaixinguoTVApp.swift */; };
 		C29D059CD809A2CC0A3DD2D8 /* SeriesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F95D9AC8833B59082956B019 /* SeriesView.swift */; };
+		C7A50EA130486DCB7D0941DF /* SignerSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18E219E75881FBF83B31A466 /* SignerSettingsView.swift */; };
 		CAC271161B1F310FFC0E66A5 /* SharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0062DAF751D7B0D38655CED3 /* SharedViews.swift */; };
 		D00373C11E064BD0B77EB1E7 /* PlayerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6B2CC9BBDF57FDEA8EA112C /* PlayerScreen.swift */; };
 		ED4637E64554E2FE4BC7E89E /* KaixinguoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDCA20F0C65FD0AD2A5EB0A7 /* KaixinguoApp.swift */; };
@@ -51,6 +53,7 @@
 /* Begin PBXFileReference section */
 		0062DAF751D7B0D38655CED3 /* SharedViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedViews.swift; sourceTree = "<group>"; };
 		13E45D7C2C398763A395FA1E /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		18E219E75881FBF83B31A466 /* SignerSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignerSettingsView.swift; sourceTree = "<group>"; };
 		21CA7965D396D5A22C7307D9 /* KaixinguoKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = KaixinguoKit; path = KaixinguoKit; sourceTree = SOURCE_ROOT; };
 		238F17A6E541D503C892FCCF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		27F97A272B150C33C5963771 /* TVSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVSmokeTests.swift; sourceTree = "<group>"; };
@@ -109,6 +112,7 @@
 				711A8EBE9E5C377A89D21934 /* PrivacyInfo.xcprivacy */,
 				A6FBA63BEC52B9EE74A5C7C2 /* Router.swift */,
 				0062DAF751D7B0D38655CED3 /* SharedViews.swift */,
+				18E219E75881FBF83B31A466 /* SignerSettingsView.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -367,6 +371,7 @@
 				B0496CDF70DD722E339E88AE /* KaixinguoTVApp.swift in Sources */,
 				22A2ADFEE7A4CB6C1E86003D /* Router.swift in Sources */,
 				CAC271161B1F310FFC0E66A5 /* SharedViews.swift in Sources */,
+				5EE6BD13D1A8597CB511034C /* SignerSettingsView.swift in Sources */,
 				9D5E89EAD91EB4F969495902 /* TVCatalogViews.swift in Sources */,
 				4BB3792F847AB2AC6E22AFC3 /* TVPlayerView.swift in Sources */,
 				A6A003AD96B845E7DA6A2950 /* TVSeriesView.swift in Sources */,
@@ -385,6 +390,7 @@
 				65AAF7A533D46990C3B95E58 /* Router.swift in Sources */,
 				C29D059CD809A2CC0A3DD2D8 /* SeriesView.swift in Sources */,
 				7AA9DA996D761D0AA33117F2 /* SharedViews.swift in Sources */,
+				C7A50EA130486DCB7D0941DF /* SignerSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

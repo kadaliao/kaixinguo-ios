@@ -29,6 +29,7 @@
 - **锁屏和控制中心**：显示剧名、集数和封面，可以暂停、拖动、换集
 - **iPad**：侧栏或顶部标签栏随意切换，播放页右边是选集面板，支持外接键盘
 - **Apple TV**：用遥控器浏览推荐、排行榜、新剧、我的和搜索；播放用系统播放器，有弹幕，控制栏里调倍速、清晰度、定时关闭，往下滑是选集
+- **签名服务**：内置签名被红果拒绝时，播放可以改用自己部署的签名服务，不用等新版
 - 跟随系统的浅色和深色外观
 
 ![iPad 上的剧集详情和播放](docs/screenshots/ipad.webp)
@@ -106,7 +107,7 @@ iPad 接上键盘时：
 | --- | --- |
 | 观看记录 | `Library/Application Support/history.json` |
 | 收藏 | `Library/Application Support/favorites.json` |
-| 匿名设备 | `Library/Application Support/openhongguo/anonymous.json`，不参与 iCloud 备份 |
+| 匿名设备 | `Library/Application Support/openhongguo/anonymous.json`，不参与 iCloud 备份；用签名服务时另有一个 `anonymous-signer.json` |
 | 封面和推荐缓存 | `Library/Caches/` |
 
 Apple TV 上应用不能在 `Library/Application Support` 里存文件，观看记录、收藏和上次的位置存在 UserDefaults 里，匿名设备在 `Library/Caches/openhongguo/anonymous.json`。
@@ -124,6 +125,9 @@ Apple TV 上应用不能在 `Library/Application Support` 里存文件，观看�
 
 **能投屏到 Apple TV 吗？**
 视频是在手机上边下边解密的，Apple TV 拿不到解密后的地址，所以 AirPlay 只能用控制中心的「屏幕镜像」。想在电视上看，直接装 Apple TV 版（见「安装」）。
+
+**所有剧都播不了，提示「这一集暂时无法匿名播放」？**
+开心果用 openhongguo 内置的签名取播放地址，红果收紧签名校验后可能要等开心果发新版才能恢复。等待期间可以自己部署一个签名服务（步骤见[部署签名服务](https://github.com/kadaliao/kaixinguo/blob/main/docs/signer.md)），在「我的」右上角的齿轮（Apple TV 上在「我的」最下面的「设置」）里填上它的地址和 token。之后内置签名取不到播放地址时，开心果会改用签名服务；只有播放请求会经过它，其他请求不受影响。地址最好用 https：保存时开心果会先检查一下服务，iOS 只允许用 http 连局域网里的地址，别的 http 地址检查不过，可以再点一次「仍然保存」。token 存在钥匙串里。
 
 **加载失败或者播放卡住？**
 在 Xcode 里编辑 Kaixinguo scheme，在 Run › Arguments › Environment Variables 里加上 `KX_DEBUG=1`，再从 Xcode 运行，控制台会打印每个请求，提 issue 时附上。

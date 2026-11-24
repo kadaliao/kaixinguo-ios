@@ -145,9 +145,11 @@ struct TVHotView: View {
     }
 }
 
-/// TVMineView is what the viewer watched, on a shelf, and saved, below it.
+/// TVMineView is what the viewer watched, on a shelf, and saved, below it,
+/// and the way to the settings at the end.
 struct TVMineView: View {
     @Environment(AppModel.self) private var model
+    @State private var settings = false
 
     var body: some View {
         let watched = Array(model.history.list.prefix(30))
@@ -170,7 +172,13 @@ struct TVMineView: View {
                 } else {
                     TVCardGrid(cards: saved)
                 }
+                Button("设置", systemImage: "gearshape") { settings = true }
+                    .padding(.top, 40)
             }
+        }
+        .sheet(isPresented: $settings) {
+            NavigationStack { SignerSettingsView() }
+                .environment(model)
         }
     }
 }

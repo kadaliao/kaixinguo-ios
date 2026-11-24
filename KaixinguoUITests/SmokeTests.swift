@@ -120,6 +120,27 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["选集"].waitForExistence(timeout: 10), "the series page did not come back")
     }
 
+    /// 我的 opens the settings, which refuse an address that is not one and
+    /// close without saving.
+    @MainActor func testSignerSettings() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-KXFresh", "YES"]
+        app.launch()
+        tab(app, "我的").tap()
+        app.buttons["设置"].tap()
+        XCTAssertTrue(app.staticTexts["签名服务"].waitForExistence(timeout: 5), "the settings did not open")
+        let field = app.textFields["地址"]
+        field.tap()
+        field.typeText("pp.example.com")
+        XCTAssertTrue(app.staticTexts["请填写以 http:// 或 https:// 开头的地址"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["保存"].isEnabled, "saving an address that is not one")
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.lifetime = .keepAlways
+        add(shot)
+        app.buttons["取消"].tap()
+        XCTAssertTrue(app.staticTexts["收藏"].waitForExistence(timeout: 5), "the settings did not close")
+    }
+
     /// The button that opens a tab. On iPad each tab's button holds another
     /// of the same name, and the back button to a tab's page is named after
     /// it too.

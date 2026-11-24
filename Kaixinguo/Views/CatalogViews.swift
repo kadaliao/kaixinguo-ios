@@ -164,6 +164,7 @@ struct HotView: View {
 struct MineView: View {
     @Environment(AppModel.self) private var model
     @Environment(Router.self) private var router
+    @State private var settings = false
 
     var body: some View {
         let watched = Array(model.history.list.prefix(30))
@@ -191,6 +192,15 @@ struct MineView: View {
             }
         }
         .navigationTitle("我的")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("设置", systemImage: "gearshape") { settings = true }
+            }
+        }
+        .sheet(isPresented: $settings) {
+            NavigationStack { SignerSettingsView() }
+                .environment(model)
+        }
     }
 
     private func section(_ title: String) -> some View {

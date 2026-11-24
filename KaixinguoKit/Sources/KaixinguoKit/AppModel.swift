@@ -76,16 +76,36 @@ public final class AppModel {
         // each holds hundreds. The anonymous device goes in Caches; once
         // it is gone, the next request registers another.
         let device = cache.appendingPathComponent("openhongguo/anonymous.json")
-        return AppModel(catalog: try OpenhongguoClient.app(profile: device),
+        return AppModel(catalog: try catalog(profile: device),
                         history: History(store: JSONStore(.defaults(key: "history", budget: 200_000))),
                         favorites: Favorites(store: JSONStore(.defaults(key: "favorites", budget: 200_000))),
                         sessions: JSONStore(.defaults(key: "session", budget: 10_000)),
                         cacheDir: cache)
         #else
         let data = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        return AppModel(catalog: try OpenhongguoClient.app(), dataDir: data, cacheDir: cache)
+        // Where the SDK keeps its anonymous device when given none.
+        let device = data.appendingPathComponent("openhongguo/anonymous.json")
+        return AppModel(catalog: try catalog(profile: device), dataDir: data, cacheDir: cache)
         #endif
     }
+
+    /// The app's catalog: the SDK's client, its anonymous device kept in
+    /// profile, and playback falling back to the signing service the
+    /// viewer set, whose client keeps its own device beside it.
+    static func catalog(profile: URL) throws -> FallbackCatalog {
+        #if os(tvOS)
+        let local = try OpenhongguoClient.app(profile: profile)
+        #else
+        let local = try OpenhongguoClient.app() // the SDK keeps it out of backups
+        #endif
+        return FallbackCatalog(local: local, store: .standard) { s in
+            try OpenhongguoClient.signer(s, beside: profile)
+        }
+    }
+
+    /// The catalog that lets playback fall back to a signing service, nil
+    /// when the model has another.
+    public var signing: FallbackCatalog? { catalog as? FallbackCatalog }
 
     /// Writes what is waiting to be saved, as the app leaves the screen.
     public func flush() {

@@ -53,6 +53,12 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.kadaliao.kaixinguo
             CFBundleURLSchemes: [kaixinguo]
+        # A signing service the viewer runs on the home network may be
+        # plain http: the settings' check reaches it, and the system asks
+        # before the app talks to the network nearby.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: 连接你在局域网里部署的签名服务。
   # The Apple TV app: its own views, KaixinguoKit and Shared/ in common with
   # the iOS app. The same bundle ID makes it the same app on the App Store.
   KaixinguoTV:
@@ -79,6 +85,12 @@ targets:
       properties:
         CFBundleDevelopmentRegion: zh-Hans
         ITSAppUsesNonExemptEncryption: false
+        # A signing service the viewer runs on the home network may be
+        # plain http: the settings' check reaches it, and the system asks
+        # before the app talks to the network nearby.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: 连接你在局域网里部署的签名服务。
   KaixinguoUITests:
     type: bundle.ui-testing
     platform: iOS

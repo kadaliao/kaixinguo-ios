@@ -50,6 +50,8 @@ flowchart LR
 | `KaixinguoKit/…/Session.swift` | 上次停在哪儿：标签、页面、搜索、播放器开着的那一集 | 无 |
 | `KaixinguoKit/…/CoverStore.swift` | 封面：下载、缩小、磁盘缓存、内存缓存 | `covers.go`、`internal/imageio` |
 | `KaixinguoKit/…/Catalog.swift` | 对 SDK 的抽象（测试里换成假的）、错误文案 | `data.go` 的 `friendly` |
+| `KaixinguoKit/…/Signer.swift` | 播放退回签名服务：内置签名被拒时改用用户部署的 openhongguo-signer，成功后 30 分钟内先用它；设置的保存（地址在 UserDefaults，token 在钥匙串）和检查 | `signer.go` |
+| `Shared/SignerSettingsView.swift` | 设置页：签名服务的地址和 token；iOS 和 tvOS 共用 | `settings.go` |
 | `Kaixinguo/KaixinguoApp.swift` | 入口、音频会话、退到后台时写盘、回到上次的地方、`kaixinguo://` 链接 | `main.go` |
 | `Kaixinguo/RootView.swift` | 标签页（iPhone 底栏、iPad 侧栏）和每个标签的导航栈 | `view.go` 的侧栏 |
 | `Shared/Router.swift` | 在哪个标签、每个标签推进了哪些页，它们和 `Session` 的互转、随改随存，以及 `kaixinguo://` 链接；iOS 和 tvOS 共用 | `view.go` 的路由 |
@@ -186,7 +188,7 @@ Apple TV 版不用 Application Support：观看记录、收藏和上次停在哪
 (cd KaixinguoKit && swift test)
 ```
 
-- **逻辑测试**（`KaixinguoKitTests`）用 `FakeCatalog` 代替 SDK，不联网：分页和去重、缓存合并、自动重试、搜索回退和补封面、选季和续播、播放状态、弹幕的分页和轨道、观看记录和收藏的读写（包括 Go 写的文件）。
+- **逻辑测试**（`KaixinguoKitTests`）用 `FakeCatalog` 代替 SDK，不联网：分页和去重、缓存合并、自动重试、搜索回退和补封面、选季和续播、播放状态、弹幕的分页和轨道、观看记录和收藏的读写（包括 Go 写的文件）、播放退回签名服务的先后和检查签名服务（用 URLProtocol 假装成签名服务）。
 - **解密测试**（`CENCTests`）在测试里从零拼出加密的 MP4（用 CommonCrypto 自己的 CTR 模式加密，不拿解密器验证自己），覆盖 senc、子样本、saiz/saio、moov 在文件末尾等情况，整段和任意切片解密结果必须一致。
 
 两个可选的测试需要真实数据：
