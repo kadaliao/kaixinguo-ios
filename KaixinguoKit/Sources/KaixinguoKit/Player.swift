@@ -53,6 +53,16 @@ public final class Player {
     /// Whether the episode's picture is wider than it is tall: from its
     /// stream at first, then from the video itself.
     public private(set) var wide = false
+    /// Whether the sound goes out over AirPlay, and to what: the episode is
+    /// then served over the network, for the device to fetch itself.
+    public private(set) var casting = false
+    public private(set) var castName = ""
+    /// Whether the video plays on the AirPlay device, rather than here.
+    public private(set) var external = false
+    /// How far the sound is turned up past the system's loudest, from 1
+    /// to `boostLimit`.
+    public private(set) var boost: Float = 1
+    public static let boostLimit = AudioBoost.most
 
     @ObservationIgnored var start: Double = 0 // where to start, in seconds
     @ObservationIgnored var startPaused = false // waits there for the viewer
@@ -62,6 +72,11 @@ public final class Player {
     @ObservationIgnored var seekOnReady: Double = 0
     @ObservationIgnored var futures: [String: Future] = [:]
     @ObservationIgnored var loaders: [StreamLoader] = []
+    @ObservationIgnored var loader: StreamLoader? // the one the item plays
+    /// The next episode's file, its start read ahead.
+    @ObservationIgnored var preloaded: (episodeID: String, url: String, loader: StreamLoader)?
+    @ObservationIgnored var played = 0 // ticks of 3 seconds the episode has played
+    @ObservationIgnored let booster = AudioBoost()
     @ObservationIgnored var itemStatus: NSKeyValueObservation?
     @ObservationIgnored var itemSize: NSKeyValueObservation?
     @ObservationIgnored var observers: [Any] = []
@@ -77,7 +92,9 @@ public final class Player {
 
     init(app: AppModel) {
         self.app = app
-        av.allowsExternalPlayback = false // AirPlay can't fetch from the loader
+        // AirPlay can't fetch from the loader: it plays an item served over
+        // the network, once the sound goes there (`routeChanged`).
+        av.allowsExternalPlayback = false
         observe()
     }
 
@@ -145,6 +162,7 @@ public final class Player {
             return
         }
         state = .resolving
+        played = 0
         sp.reveal(number)
         // The length the history knows stays until the video says it again,
         // which a paused start may not for a while.
@@ -156,7 +174,8 @@ public final class Player {
             let result = await f.task.result
             guard self.gen == gen else { return }
             do {
-                let item = try makeItem(result.get(), sp, ep)
+                let item = try await makeItem(result.get(), sp, ep)
+                guard self.gen == gen else { return }
                 state = .buffering
                 episodeID = ep.id
                 seekOnReady = start
@@ -208,7 +227,38 @@ public final class Player {
 
     /// The item that plays the stream of the model nearest the definition
     /// the viewer picked, decrypting it with its key.
-    func makeItem(_ r: PlaybackResult, _ sp: SeriesPage, _ ep: Episode) throws -> AVPlayerItem {
+    func makeItem(_ r: PlaybackResult, _ sp: SeriesPage, _ ep: Episode) async throws -> AVPlayerItem {
+        let pb = r.playback
+        let (s, sources, key) = try stream(r)
+        let loader: StreamLoader
+        if let p = preloaded, p.episodeID == ep.id, p.url == s.url {
+            loader = p.loader // its start read ahead as the episode before played
+            preloaded = nil
+        } else {
+            loader = StreamLoader(sources: sources, key: key)
+        }
+        // Keep the last few: the one playing, and one the player may
+        // still read.
+        loaders.append(loader)
+        while loaders.count > 3 {
+            loaders.removeFirst().invalidate()
+        }
+        self.loader = loader
+        let item = try await playerItem(loader)
+        qualities = Array(Set(playable(pb.streams).map(lines))).sorted(by: >)
+        quality = lines(s)
+        if s.width > 0, s.height > 0 {
+            wide = s.width > s.height
+        }
+        #if os(iOS) || os(tvOS)
+        item.externalMetadata = metadata(sp, ep)
+        #endif
+        return item
+    }
+
+    /// The stream of the model to play, nearest the definition the viewer
+    /// picked: where to fetch it, and the key that decrypts it.
+    func stream(_ r: PlaybackResult) throws -> (Openhongguo.Stream, [URL], [UInt8]?) {
         let pb = r.playback
         guard let s = pickStream(pb.streams, near: preferredQuality), let url = URL(string: s.url) else {
             throw AppError("这一集没有可以播放的视频")
@@ -228,23 +278,16 @@ public final class Player {
         if let backup = URL(string: s.backupUrl), s.backupUrl != s.url {
             sources.append(backup)
         }
-        let loader = StreamLoader(sources: sources, key: key)
-        // Keep the last few: the one playing, and one the player may
-        // still read.
-        loaders.append(loader)
-        while loaders.count > 3 {
-            loaders.removeFirst().invalidate()
+        return (s, sources, key)
+    }
+
+    /// The item that plays the loader's file: through the loader itself,
+    /// or, while casting, over the network, which AirPlay can fetch from.
+    func playerItem(_ loader: StreamLoader) async throws -> AVPlayerItem {
+        if casting {
+            return AVPlayerItem(url: try await StreamServer.shared.url(for: loader))
         }
-        let item = AVPlayerItem(asset: loader.makeAsset())
-        qualities = Array(Set(playable(pb.streams).map(lines))).sorted(by: >)
-        quality = lines(s)
-        if s.width > 0, s.height > 0 {
-            wide = s.width > s.height
-        }
-        #if os(iOS) || os(tvOS)
-        item.externalMetadata = metadata(sp, ep)
-        #endif
-        return item
+        return AVPlayerItem(asset: loader.makeAsset())
     }
 
     /// Lets the episode go, as another starts; `keep` leaves it on screen,
@@ -435,7 +478,10 @@ public final class Player {
         })
         observers.append(av.addPeriodicTimeObserver(forInterval: CMTime(seconds: 3, preferredTimescale: 600),
                                                     queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.recordProgress() }
+            MainActor.assumeIsolated {
+                self?.recordProgress()
+                self?.tick()
+            }
         })
         #if os(iOS) || os(tvOS)
         let commands = MPRemoteCommandCenter.shared()
@@ -448,7 +494,63 @@ public final class Player {
             return .success
         }
         #endif
+        #if os(iOS)
+        observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil,
+                                            queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.routeChanged() }
+        })
+        observers.append(av.observe(\.isExternalPlaybackActive, options: [.new]) { [weak self] av, _ in
+            let on = av.isExternalPlaybackActive
+            Task { @MainActor in self?.external = on }
+        })
+        routeChanged()
+        #endif
     }
+
+    #if os(iOS)
+    // MARK: - Casting
+
+    /// Follows where the sound goes: to an AirPlay device, the episode
+    /// plays from the network, which the device fetches the video from
+    /// itself; back here, from the loader again.
+    private func routeChanged() {
+        let out = AVAudioSession.sharedInstance().currentRoute.outputs.first { $0.portType == .airPlay }
+        castName = out?.portName ?? ""
+        let on = out != nil
+        guard on != casting else { return }
+        casting = on
+        av.allowsExternalPlayback = on
+        if !on {
+            StreamServer.shared.stop()
+        }
+        replay()
+    }
+
+    /// Plays the episode on from where it is, in an item the way it plays
+    /// now: over the network while casting, from the loader otherwise.
+    private func replay() {
+        guard let loader, let old = av.currentItem, !episodeID.isEmpty else { return }
+        let t = old.currentTime().seconds, wasPaused = av.rate == 0, gen = gen
+        let meta = old.externalMetadata
+        Task {
+            do {
+                let item = try await playerItem(loader)
+                guard self.gen == gen, av.currentItem === old else { return }
+                item.externalMetadata = meta
+                state = .buffering
+                seekOnReady = t.isFinite ? t : 0
+                watch(item)
+                av.replaceCurrentItem(with: item)
+                if !wasPaused {
+                    av.play()
+                }
+            } catch {
+                debugLog("cast: \(error)")
+                state = .failed(friendly(error))
+            }
+        }
+    }
+    #endif
 
     private func watch(_ item: AVPlayerItem) {
         itemStatus = item.observe(\.status, options: [.new]) { [weak self] item, _ in
@@ -472,6 +574,9 @@ public final class Player {
         guard let item = av.currentItem, ObjectIdentifier(item) == id else { return }
         switch status {
         case .readyToPlay:
+            if boost > 1 {
+                Task { await booster.attach(to: item) }
+            }
             if seekOnReady > 0 {
                 // To the frame: the default tolerance may land seconds off,
                 // and the viewer comes back to the second they left.
@@ -514,6 +619,59 @@ public final class Player {
             _ = resolve(next)
         } else if let ns = sp.nextSeason() {
             _ = app.seriesPage(ns.seriesId) // its episodes, ready to go on
+        }
+    }
+
+    /// How long the episode plays before the next one's start is read
+    /// ahead, in ticks of 3 seconds; and how much of it, in seconds of
+    /// video.
+    static let preloadAfter = 3
+    static let preloadSeconds = 20
+
+    /// Counts the episode playing on, and once it has played a while,
+    /// reads the start of the next one ahead, so it starts at once.
+    private func tick() {
+        guard state == .playing, av.timeControlStatus == .playing else { return }
+        played += 1
+        if played >= Self.preloadAfter {
+            preloadNext()
+        }
+    }
+
+    func preloadNext() {
+        guard let sp = page, let next = app.following(sp, number) else { return }
+        let nsp = app.seriesEntry(next.seriesID)
+        guard nsp.series != nil, !nsp.isBook, let ep = nsp.episode(next.number), ep.playable else { return }
+        if let p = preloaded, p.episodeID == ep.id {
+            return
+        }
+        let f = resolve(ep), gen = gen
+        if f.outcome == nil {
+            return // still on its way: the next tick tries again
+        }
+        guard self.gen == gen, case .success(let r)? = f.outcome, let (s, sources, key) = try? stream(r) else { return }
+        preloaded?.loader.invalidate()
+        let loader = StreamLoader(sources: sources, key: key)
+        preloaded = (ep.id, s.url, loader)
+        loader.preload(preloadBytes(s))
+    }
+
+    /// How much of the stream's start to read ahead: some seconds of it at
+    /// its bitrate, between 2 and 8 MB.
+    func preloadBytes(_ s: Openhongguo.Stream) -> Int64 {
+        guard s.bitrate > 0 else { return 4 << 20 }
+        return min(max(Int64(s.bitrate) / 8 * Int64(Self.preloadSeconds), 2 << 20), 8 << 20)
+    }
+
+    // MARK: - Louder than loud
+
+    /// Turns the sound up past the system's loudest, up to `boostLimit`;
+    /// 1 for as loud as the system plays it.
+    public func setBoost(_ b: Float) {
+        booster.value = b
+        boost = booster.value
+        if boost > 1, let item = av.currentItem {
+            Task { await booster.attach(to: item) }
         }
     }
 

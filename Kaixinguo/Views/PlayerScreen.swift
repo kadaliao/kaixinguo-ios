@@ -1,19 +1,23 @@
 import AVKit
 import KaixinguoKit
+import MediaPlayer
 import Openhongguo
 import SwiftUI
 
 /// PlayerScreen is the episode playing, its video filling the screen: what
 /// plays and how fast above it, the episodes below it on iPhone and beside
 /// it on iPad. Swiping up goes on to the next episode, and down back to the
-/// one before.
+/// one before. A while after the last touch, as the video plays, all but
+/// the video fades away; a tap brings it back.
 struct PlayerScreen: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var hsize
     @Environment(\.verticalSizeClass) private var vsize
+    @Environment(\.scenePhase) private var phase
     @State private var showEpisodes = false
     @State private var searching = false
     @State private var resumeAfterSearch = false
+    private let hud = PlayerHost.shared.hud
 
     var body: some View {
         let landscape = vsize == .compact // a phone on its side: the video alone
@@ -26,6 +30,13 @@ struct PlayerScreen: View {
                     VideoArea(landscape: landscape, search: openSearch)
                     if !landscape && !panel {
                         EpisodeBar { showEpisodes = true }
+                            .chrome(hud.chrome)
+                            .overlay {
+                                if !hud.chrome { // where it was, a tap brings the controls back
+                                    Color.clear.contentShape(Rectangle())
+                                        .onTapGesture { hud.showChrome() }
+                                }
+                            }
                     }
                 }
                 if panel {
@@ -47,9 +58,19 @@ struct PlayerScreen: View {
         }
         .background(Color.black.ignoresSafeArea())
         .environment(\.colorScheme, .dark)
-        .onDisappear { Rotation.shared.release() }
-        .statusBarHidden(landscape)
-        .persistentSystemOverlays(landscape ? .hidden : .automatic)
+        .onAppear { hud.chrome = true }
+        .onDisappear {
+            Rotation.shared.release()
+            PlayerHost.shared.restoreBrightness()
+        }
+        .onChange(of: phase) {
+            if phase == .background {
+                PlayerHost.shared.restoreBrightness()
+            }
+        }
+        .background(ChromeTimer(busy: showEpisodes || searching))
+        .statusBarHidden(landscape || !hud.chrome)
+        .persistentSystemOverlays(landscape || !hud.chrome ? .hidden : .automatic)
         .sheet(isPresented: $showEpisodes) {
             EpisodePanel { showEpisodes = false }
                 .presentationDetents([.medium, .large])
@@ -86,23 +107,31 @@ private struct VideoArea: View {
     var landscape: Bool
     var search: () -> Void
     @Environment(AppModel.self) private var model
+    private let hud = PlayerHost.shared.hud
 
     var body: some View {
         ZStack {
             PlayerControllerView(player: model.player)
-                .offset(y: PlayerHost.shared.hud.offset)
+                .offset(y: hud.offset)
                 .ignoresSafeArea(edges: landscape ? .all : .top)
-            DanmakuLayer(size: 16, pitch: 28)
-                .padding(.top, 48) // below the top bar
-                .ignoresSafeArea(edges: .horizontal)
-                .offset(y: PlayerHost.shared.hud.offset)
+            if model.player.external {
+                CastMark()
+            } else {
+                DanmakuLayer(size: 16, pitch: 28)
+                    .padding(.top, 48) // below the top bar
+                    .ignoresSafeArea(edges: .horizontal)
+                    .offset(y: hud.offset)
+            }
             PauseMark()
             PlayerOverlay()
             VStack(spacing: 0) {
                 TopBar(landscape: landscape, search: search)
+                    .chrome(hud.chrome)
                 SpeedHint()
+                LevelHint()
                 Spacer(minLength: 0)
                 ProgressBar()
+                    .chrome(hud.chrome)
             }
         }
     }
@@ -173,6 +202,33 @@ private struct KeyControls: View {
     }
 }
 
+/// CastMark covers the video while it plays on an AirPlay device: what it
+/// plays on. Taps and swipes go through it, as on the video.
+private struct CastMark: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let player = model.player
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 12) {
+                Image(systemName: "tv")
+                    .font(.system(size: 44, weight: .light))
+                Text("正在投屏")
+                    .font(.headline)
+                if !player.castName.isEmpty {
+                    Text(player.castName)
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+            }
+            .foregroundStyle(.white)
+        }
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// PauseMark says the video is paused; a tap anywhere on it plays on.
 private struct PauseMark: View {
     @Environment(AppModel.self) private var model
@@ -214,6 +270,8 @@ private struct TopBar: View {
                 Text(verbatim: "第 \(player.number) 集")
                     .font(.headline)
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 if let title = player.page?.series?.title {
                     Text(title)
                         .font(.caption)
@@ -227,9 +285,11 @@ private struct TopBar: View {
             Spacer(minLength: 8)
             SpeedMenu()
             RotateButton(landscape: landscape)
+            CastButton()
+                .frame(width: 40, height: 44)
             Button(action: search) {
                 Image(systemName: "magnifyingglass")
-                    .frame(width: 44, height: 44)
+                    .frame(width: 40, height: 44)
                     .contentShape(Rectangle())
             }
             .accessibilityLabel("搜索")
@@ -274,6 +334,37 @@ private struct SpeedMenu: View {
     }
 }
 
+/// CastButton picks where the video plays: here, or on an Apple TV or a
+/// television AirPlay reaches, which fetches it from the app itself.
+private struct CastButton: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let v = AVRoutePickerView()
+        v.prioritizesVideoDevices = true
+        v.tintColor = .white
+        v.activeTintColor = .tintColor
+        v.accessibilityLabel = "投屏"
+        v.delegate = context.coordinator
+        return v
+    }
+
+    func updateUIView(_ v: AVRoutePickerView, context: Context) {}
+
+    func makeCoordinator() -> Picking { Picking() }
+
+    /// Picking keeps the controls while the devices to pick from show.
+    @MainActor final class Picking: NSObject, @MainActor AVRoutePickerViewDelegate {
+        func routePickerViewWillBeginPresentingRoutes(_ v: AVRoutePickerView) {
+            PlayerHost.shared.hud.picking = true
+        }
+
+        func routePickerViewDidEndPresentingRoutes(_ v: AVRoutePickerView) {
+            let hud = PlayerHost.shared.hud
+            hud.picking = false
+            hud.poke()
+        }
+    }
+}
+
 /// RotateButton turns the screen on its side for a video wider than tall,
 /// and upright again: on iPhone, where on its side the screen shows the
 /// video alone. It stays while the screen is held on its side, so there is
@@ -285,7 +376,10 @@ private struct RotateButton: View {
 
     var body: some View {
         if UIDevice.current.userInterfaceIdiom == .phone, model.player.wide || rotation.held == .landscape {
-            Button { rotation.turn(landscape: !landscape) } label: {
+            Button {
+                rotation.turn(landscape: !landscape)
+                PlayerHost.shared.hud.poke()
+            } label: {
                 Image(systemName: landscape ? "rectangle.portrait.rotate" : "rectangle.landscape.rotate")
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
@@ -301,7 +395,10 @@ private struct SpeedPicker: View {
 
     var body: some View {
         let player = model.player
-        Picker("倍速", selection: Binding(get: { player.speed }, set: { player.setSpeed($0) })) {
+        Picker("倍速", selection: Binding(get: { player.speed }, set: {
+            player.setSpeed($0)
+            PlayerHost.shared.hud.poke()
+        })) {
             ForEach(Player.speeds.reversed(), id: \.self) { s in
                 Text(speedLabel(s)).tag(s)
             }
@@ -327,7 +424,10 @@ private struct MoreMenu: View {
             }
             if !player.qualities.isEmpty {
                 Menu {
-                    Picker("清晰度", selection: Binding(get: { player.quality }, set: { player.setQuality($0) })) {
+                    Picker("清晰度", selection: Binding(get: { player.quality }, set: {
+                        player.setQuality($0)
+                        PlayerHost.shared.hud.poke()
+                    })) {
                         ForEach(player.qualities, id: \.self) { q in
                             Text(verbatim: "\(q)P").tag(q)
                         }
@@ -338,7 +438,10 @@ private struct MoreMenu: View {
                 }
             }
             Menu {
-                Picker("定时关闭", selection: Binding(get: { player.sleep }, set: { player.setSleep($0) })) {
+                Picker("定时关闭", selection: Binding(get: { player.sleep }, set: {
+                    player.setSleep($0)
+                    PlayerHost.shared.hud.poke()
+                })) {
                     ForEach(sleepChoices, id: \.0) { s, label in
                         Text(label).tag(s)
                     }
@@ -353,6 +456,7 @@ private struct MoreMenu: View {
                 let saved = model.favorites.has(sp.id)
                 Button(favLabel(saved) + "这部剧", systemImage: saved ? "star.slash" : "star") {
                     model.favorites.toggle(Fav(Card(series)))
+                    PlayerHost.shared.hud.poke()
                 }
                 Button("剧集详情", systemImage: "info.circle") {
                     player.leave()
@@ -368,6 +472,7 @@ private struct MoreMenu: View {
                 .contentShape(Rectangle())
         }
         .accessibilityLabel("更多")
+        .onChange(of: danmaku) { PlayerHost.shared.hud.poke() }
     }
 }
 
@@ -416,8 +521,15 @@ private struct ProgressBar: View {
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
-                .onChanged { v in dragged = min(max(v.location.x / w, 0), 1) }
-                .onEnded { _ in seek(total) })
+                .onChanged { v in
+                    dragged = min(max(v.location.x / w, 0), 1)
+                    PlayerHost.shared.hud.scrubbing = true
+                }
+                .onEnded { _ in
+                    PlayerHost.shared.hud.scrubbing = false
+                    PlayerHost.shared.hud.poke()
+                    seek(total)
+                })
         }
         .frame(height: 28)
         .opacity(total > 0 ? 1 : 0)
@@ -516,6 +628,150 @@ private struct SpeedHint: View {
 /// What going back from double speed says: to the speed the viewer chose.
 private func restoring(_ rate: Float) -> String {
     rate == 1 ? "恢复正常速度" : "恢复 \(rateText(rate)) 倍速"
+}
+
+/// LevelHint shows the brightness or the volume a swipe up or down at the
+/// side of the video sets, as it goes: the volume past 100% in orange, and
+/// a mark where the system's loudest ends.
+private struct LevelHint: View {
+    private let hud = PlayerHost.shared.hud
+
+    var body: some View {
+        ZStack {
+            if let level = hud.level {
+                let most: Float = level.kind == .volume ? Player.boostLimit : 1
+                let over = level.value > 1.001
+                HStack(spacing: 10) {
+                    Image(systemName: icon(level))
+                        .frame(width: 24)
+                        .accessibilityLabel(level.kind == .volume ? "音量" : "亮度")
+                    GeometryReader { g in
+                        let w = g.size.width
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(.white.opacity(0.25))
+                            Capsule().fill(over ? Color.orange : .white)
+                                .frame(width: w * CGFloat(level.value / most))
+                            if most > 1 {
+                                Rectangle().fill(.white.opacity(0.7))
+                                    .frame(width: 1.5, height: 10)
+                                    .offset(x: w / CGFloat(most))
+                            }
+                        }
+                        .frame(maxHeight: .infinity)
+                    }
+                    .frame(width: 140, height: 10)
+                    Text(verbatim: "\(Int((level.value * 100).rounded()))%")
+                        .monospacedDigit()
+                        .frame(width: 48, alignment: .trailing)
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.black.opacity(0.6), in: Capsule())
+                .transition(.opacity)
+                .sensoryFeedback(.impact(weight: .light), trigger: over) // past the system's loudest, and back
+            }
+        }
+        .padding(.top, 12)
+        .allowsHitTesting(false)
+        .animation(.easeOut(duration: 0.2), value: hud.level == nil)
+    }
+
+    private func icon(_ level: PlayerHUD.Level) -> String {
+        switch level.kind {
+        case .brightness:
+            return level.value < 0.5 ? "sun.min.fill" : "sun.max.fill"
+        case .volume:
+            switch level.value {
+            case ..<0.01: return "speaker.slash.fill"
+            case ..<0.34: return "speaker.wave.1.fill"
+            case ..<0.67: return "speaker.wave.2.fill"
+            default: return "speaker.wave.3.fill"
+            }
+        }
+    }
+}
+
+private extension View {
+    /// Shows the controls, or fades them, leaving taps where they were to
+    /// the video.
+    func chrome(_ shown: Bool) -> some View {
+        opacity(shown ? 1 : 0)
+            .allowsHitTesting(shown)
+            .animation(.easeInOut(duration: 0.3), value: shown)
+    }
+}
+
+/// ChromeTimer fades the controls once the video has played on a while
+/// untouched, and brings them back as it pauses or fails. It is a view of
+/// its own so that each touch, which starts it again, redraws nothing else.
+///
+/// The touches are counted where they land (`PlayerHUD.poke`), not by a
+/// recognizer watching the whole screen: that holds up a menu's items and
+/// the video's own taps, which then go missing now and then.
+private struct ChromeTimer: View {
+    var busy: Bool // something else on screen, which the controls stay for
+    @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    private let hud = PlayerHost.shared.hud
+
+    /// How long the controls stay after the last touch, as the video plays;
+    /// Debug builds take `-KXChromeFor <seconds>`, so the UI tests have time
+    /// to reach them.
+    private static var delay: Duration {
+        #if DEBUG
+        let s = UserDefaults.standard.double(forKey: "KXChromeFor")
+        if s > 0 {
+            return .seconds(s)
+        }
+        #endif
+        return .seconds(4)
+    }
+
+    var body: some View {
+        Color.clear
+            .allowsHitTesting(false)
+            .task(id: key) {
+                let k = key
+                guard k.shown, k.playing, !k.busy else { return }
+                try? await Task.sleep(for: Self.delay)
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 0.3)) { hud.chrome = false }
+            }
+            .onChange(of: stopped) {
+                if stopped {
+                    hud.showChrome()
+                }
+            }
+    }
+
+    /// Whether the video has stopped where the viewer sees it: paused, or
+    /// failed.
+    private var stopped: Bool {
+        let player = model.player
+        if case .failed = player.state {
+            return true
+        }
+        return player.paused && (player.state == .playing || player.state == .buffering)
+    }
+
+    /// What the fading waits on: it starts again as any of it changes.
+    private var key: ChromeKey {
+        let player = model.player
+        return ChromeKey(touches: hud.touches, shown: hud.chrome,
+                         playing: player.state == .playing && !player.paused,
+                         busy: busy || voiceOver || hud.holding || hud.level != nil || hud.scrubbing || hud.picking
+                             || hud.offset != 0)
+    }
+}
+
+/// ChromeKey is what the controls fading waits on.
+private struct ChromeKey: Hashable {
+    var touches: Int
+    var shown: Bool
+    var playing: Bool
+    var busy: Bool
 }
 
 // MARK: - Under and beside the video
@@ -777,8 +1033,10 @@ private struct PlayerControllerView: UIViewControllerRepresentable {
 /// PlayerHost keeps the one player view controller there is, so picture
 /// in picture goes on when the player's screen closes, and comes back to
 /// the screen it left. It also reads the fingers on the video: a tap
-/// pauses, a swipe moves between episodes, and a press and hold plays at
-/// double speed.
+/// brings back the controls, or with them showing pauses; a swipe up or
+/// down moves between episodes in the middle, and sets the brightness on
+/// the left and the volume on the right; a press and hold plays at double
+/// speed.
 @MainActor
 final class PlayerHost: NSObject, @MainActor AVPlayerViewControllerDelegate, UIGestureRecognizerDelegate {
     static let shared = PlayerHost()
@@ -789,6 +1047,10 @@ final class PlayerHost: NSObject, @MainActor AVPlayerViewControllerDelegate, UIG
     private var vc: AVPlayerViewController?
     private weak var player: Player?
     private var holdFrom: CGFloat = 0 // where the held finger was when it began
+    private var swipe: PlayerHUD.Level.Kind? // what a swipe sets; nil to move between episodes
+    private var swipeFrom: Float = 0 // the level as the swipe began
+    private var brightnessBefore: CGFloat? // the screen's, before a swipe set it
+    private let volume = Volume()
 
     func controller(for player: Player) -> AVPlayerViewController {
         self.player = player
@@ -815,6 +1077,7 @@ final class PlayerHost: NSObject, @MainActor AVPlayerViewControllerDelegate, UIG
         for g in [tap, swipe, press] {
             vc.view.addGestureRecognizer(g)
         }
+        volume.install(in: vc.view, player: player)
         self.vc = vc
         return vc
     }
@@ -822,14 +1085,82 @@ final class PlayerHost: NSObject, @MainActor AVPlayerViewControllerDelegate, UIG
     // MARK: Fingers on the video
 
     @objc private func tapped() {
+        guard hud.chrome else {
+            hud.showChrome()
+            return
+        }
         player?.togglePause()
+        hud.poke()
+    }
+
+    /// A swipe up or down: on the left third of the video it sets the
+    /// brightness, on the right third the volume, and in the middle it
+    /// moves between episodes.
+    @objc private func swiped(_ g: UIPanGestureRecognizer) {
+        guard let player, let view = g.view else { return }
+        if g.state == .began {
+            let w = view.bounds.width
+            let x = g.location(in: view).x - g.translation(in: view).x // where the finger came down
+            swipe = x < w / 3 ? .brightness : x > w * 2 / 3 ? .volume : nil
+        }
+        if let swipe {
+            adjust(swipe, g, view, player)
+        } else {
+            moveEpisodes(g, view, player)
+        }
+        if g.state == .ended || g.state == .cancelled {
+            hud.touches += 1
+        }
+    }
+
+    /// Sets the brightness or the volume as the finger goes: a swipe most
+    /// of the way up the video goes from none to full. The volume goes on
+    /// past the system's loudest, to `Player.boostLimit`.
+    private func adjust(_ kind: PlayerHUD.Level.Kind, _ g: UIPanGestureRecognizer, _ view: UIView, _ player: Player) {
+        let screen = view.window?.windowScene?.screen
+        switch g.state {
+        case .began:
+            swipeFrom = kind == .brightness ? Float(screen?.brightness ?? 0.5) : volume.level(player)
+            hud.adjusting = true
+            hud.level = PlayerHUD.Level(kind: kind, value: swipeFrom)
+        case .changed:
+            let span = max(view.bounds.height * 0.7, 240)
+            let most = kind == .brightness ? 1 : volume.most(player)
+            let v = min(max(swipeFrom + Float(-g.translation(in: view).y / span), 0), most)
+            switch kind {
+            case .brightness:
+                if brightnessBefore == nil {
+                    brightnessBefore = screen?.brightness
+                }
+                screen?.brightness = CGFloat(v)
+            case .volume:
+                volume.set(v, player)
+            }
+            hud.level?.value = v
+        default:
+            hud.adjusting = false
+            let hud = hud
+            Task {
+                try? await Task.sleep(for: .milliseconds(1500))
+                if !hud.adjusting {
+                    hud.level = nil
+                }
+            }
+        }
+    }
+
+    /// Puts the screen's brightness back as it was before a swipe set it,
+    /// as the player closes or the app leaves the screen.
+    func restoreBrightness() {
+        guard let b = brightnessBefore else { return }
+        brightnessBefore = nil
+        vc?.view.window?.windowScene?.screen.brightness = b
     }
 
     /// Swiping up plays the next episode, and down the one before: the
     /// video follows the finger, and goes on out if it went far or fast
     /// enough.
-    @objc private func swiped(_ g: UIPanGestureRecognizer) {
-        guard let player, let view = g.view else { return }
+    private func moveEpisodes(_ g: UIPanGestureRecognizer, _ view: UIView, _ player: Player) {
         let dy = g.translation(in: nil).y
         let d = dy < 0 ? 1 : -1
         let can = d > 0 ? player.hasNext : player.hasPrevious
@@ -877,6 +1208,7 @@ final class PlayerHost: NSObject, @MainActor AVPlayerViewControllerDelegate, UIG
                 hud.swiped = swiped
             }
         case .ended, .cancelled:
+            hud.touches += 1
             let was = player.doubleSpeed
             player.endHold(swiped: g.state == .ended && hud.swiped)
             hud.holding = false
@@ -1001,6 +1333,20 @@ final class Rotation {
 /// a word on what the last one did.
 @MainActor @Observable
 final class PlayerHUD {
+    /// Whether the controls over the video show: they fade a while after
+    /// the last touch as the video plays, and a tap brings them back.
+    var chrome = true
+    /// How many touches on the video and its controls have ended, each
+    /// keeping the controls a while longer; and what keeps them while it
+    /// goes on: a finger dragging along the progress bar, the AirPlay
+    /// devices to pick from.
+    var touches = 0
+    var scrubbing = false
+    var picking = false
+    /// The brightness or volume a swipe at the side sets, while it shows;
+    /// and whether the swipe goes on.
+    var level: Level?
+    var adjusting = false
     var holding = false
     /// Whether the held finger has swiped far enough that letting go flips
     /// the lock.
@@ -1009,4 +1355,72 @@ final class PlayerHUD {
     var offset: CGFloat = 0
     /// What the last gesture did, or couldn't, said for a moment.
     var toast: String?
+
+    struct Level: Equatable {
+        enum Kind { case brightness, volume }
+        var kind: Kind
+        var value: Float // brightness 0 to 1; volume 0 to `Player.boostLimit`
+    }
+
+    func showChrome() {
+        guard !chrome else { return }
+        withAnimation(.easeOut(duration: 0.2)) { chrome = true }
+    }
+
+    /// Keeps the controls a while longer, after a touch on them; or brings
+    /// them back, as a choice in a menu they faded behind is made.
+    func poke() {
+        touches += 1
+        showChrome()
+    }
+}
+
+// MARK: - Volume
+
+/// Volume sets the system's volume from a swipe, through a volume view of
+/// its own on the player, which keeps the system's volume from showing
+/// too; past the system's loudest it turns the episode up itself
+/// (`Player.setBoost`). The volume buttons turning it down end that.
+@MainActor
+final class Volume {
+    private let view = MPVolumeView(frame: CGRect(x: -2000, y: -2000, width: 20, height: 20))
+    private var observer: NSKeyValueObservation?
+    private weak var player: Player?
+
+    func install(in host: UIView, player: Player) {
+        self.player = player
+        view.alpha = 0.01 // there, but not seen: the system's volume shows otherwise
+        view.isUserInteractionEnabled = false
+        view.accessibilityElementsHidden = true
+        host.addSubview(view)
+        observer = AVAudioSession.sharedInstance().observe(\.outputVolume, options: [.new]) { [weak self] s, _ in
+            let v = s.outputVolume
+            Task { @MainActor in
+                if v < 0.99, let p = self?.player, p.boost > 1 {
+                    p.setBoost(1)
+                }
+            }
+        }
+    }
+
+    private var system: Float { AVAudioSession.sharedInstance().outputVolume }
+
+    /// The volume now, from 0 to `most`.
+    func level(_ player: Player) -> Float {
+        player.boost > 1 ? player.boost : system
+    }
+
+    /// The loudest a swipe goes: past the system's only on this device.
+    func most(_ player: Player) -> Float {
+        player.casting ? 1 : Player.boostLimit
+    }
+
+    func set(_ v: Float, _ player: Player) {
+        let s = min(v, 1)
+        if abs(system - s) > 0.001, let slider = view.subviews.lazy.compactMap({ $0 as? UISlider }).first {
+            slider.value = s
+            slider.sendActions(for: .valueChanged)
+        }
+        player.setBoost(max(v, 1))
+    }
 }

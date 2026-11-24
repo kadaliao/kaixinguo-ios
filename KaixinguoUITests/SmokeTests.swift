@@ -10,7 +10,9 @@ final class SmokeTests: XCTestCase {
 
     @MainActor func testBrowseSaveAndPlay() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-KXFresh", "YES"] // not where the last run left off
+        // Not where the last run left off; and the player's controls a while
+        // longer before they fade, for the test to reach them.
+        app.launchArguments = ["-KXFresh", "YES", "-KXChromeFor", "8"]
         app.launch()
 
         // A recommendation opens its page.
@@ -35,10 +37,11 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["退出播放"].waitForExistence(timeout: 10), "the player did not open")
         let first = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH '第 1 集 / 共'")).firstMatch
         XCTAssertTrue(first.waitForExistence(timeout: 10))
-        // Left of center, to miss the episode panel on iPad.
-        let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.3))
-        let middle = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.45))
-        let low = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.7))
+        // In the middle third of the video, where swipes move between
+        // episodes: a little left of center, for the episode panel on iPad.
+        let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.3))
+        let middle = app.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.45))
+        let low = app.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.7))
         low.press(forDuration: 0.05, thenDragTo: top)
         let second = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH '第 2 集 / 共'")).firstMatch
         XCTAssertTrue(second.waitForExistence(timeout: 10), "swiping up did not play the next episode")
@@ -47,7 +50,14 @@ final class SmokeTests: XCTestCase {
         shot.lifetime = .keepAlways
         add(shot)
 
-        // A tap pauses, and another plays on; so does the space bar.
+        // Untouched as it plays, the controls fade; a tap brings them back.
+        let exit = app.buttons["退出播放"]
+        XCTAssertFalse(exit.isHittable, "the controls did not fade")
+        middle.tap()
+        XCTAssertTrue(exit.waitForExistence(timeout: 2) && exit.isHittable, "a tap did not bring the controls back")
+
+        // With them showing, a tap pauses, and another plays on; so does
+        // the space bar.
         middle.tap()
         XCTAssertTrue(app.images["已暂停"].waitForExistence(timeout: 3), "a tap did not pause")
         middle.tap()
@@ -64,7 +74,20 @@ final class SmokeTests: XCTestCase {
         middle.press(forDuration: 1.5, thenDragTo: top, withVelocity: .slow, thenHoldForDuration: 1.5)
         XCTAssertTrue(app.staticTexts["已恢复正常速度"].waitForExistence(timeout: 2), "double speed did not turn off")
 
+        // A swipe on the left third sets the brightness, on the right third
+        // the volume.
+        let left = app.coordinate(withNormalizedOffset: CGVector(dx: 0.12, dy: 0.55))
+        left.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.12, dy: 0.4)),
+                   withVelocity: .fast, thenHoldForDuration: 0.3)
+        XCTAssertTrue(shows(app, "亮度"), "no brightness shown")
+        let right = app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.4))
+        right.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.55)),
+                    withVelocity: .fast, thenHoldForDuration: 0.3)
+        XCTAssertTrue(shows(app, "音量"), "no volume shown")
+        XCTAssertTrue(second.exists, "a swipe at the side changed the episode")
+
         // Search covers the player, and its back button goes on playing.
+        controls(app)
         app.buttons["搜索"].firstMatch.tap()
         XCTAssertTrue(app.buttons["返回播放"].waitForExistence(timeout: 5), "search did not open")
         app.buttons["返回播放"].tap()
@@ -73,10 +96,12 @@ final class SmokeTests: XCTestCase {
 
         // The more menu picks a lower definition, which plays on; and goes
         // back to the series, which goes on from the episode watched.
+        controls(app)
         app.buttons["更多"].tap()
         app.buttons["sparkles.tv"].tap()
         app.buttons["720P"].firstMatch.tap()
         XCTAssertFalse(app.staticTexts["视频加载失败，请重试"].waitForExistence(timeout: 5), "720P failed to play")
+        controls(app)
         app.buttons["更多"].tap()
         XCTAssertTrue(app.buttons["sparkles.tv"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["sparkles.tv"].label.contains("720P"), app.buttons["sparkles.tv"].label)
@@ -101,7 +126,11 @@ final class SmokeTests: XCTestCase {
         let progress = app.descendants(matching: .any)["播放进度"]
         XCTAssertTrue(progress.waitForExistence(timeout: 20), "the episode did not load")
         sleep(5)
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.45)).tap()
+        let spot = app.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.45))
+        if !app.buttons["退出播放"].isHittable {
+            spot.tap() // the controls faded: back first
+        }
+        spot.tap()
         XCTAssertTrue(app.images["已暂停"].waitForExistence(timeout: 3), "a tap did not pause")
         let at = try XCTUnwrap(progress.value as? String)
         XCTAssertFalse(at.hasPrefix("0:00"), at)
@@ -146,5 +175,25 @@ final class SmokeTests: XCTestCase {
     /// it too.
     @MainActor private func tab(_ app: XCUIApplication, _ name: String) -> XCUIElement {
         app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != 'BackButton'", name)).firstMatch
+    }
+}
+
+/// Whether something labeled so is on screen now: from one snapshot, quick
+/// enough for what shows only a moment, as the brightness and volume do
+/// after a swipe.
+@MainActor private func shows(_ app: XCUIApplication, _ label: String) -> Bool {
+    func find(_ e: XCUIElementSnapshot) -> Bool {
+        e.label == label || e.children.contains(where: find)
+    }
+    guard let root = try? app.snapshot() else { return false }
+    return find(root)
+}
+
+/// Brings back the player's controls if they faded, as they do a few
+/// seconds after the last touch while the episode plays.
+@MainActor private func controls(_ app: XCUIApplication) {
+    if !app.buttons["退出播放"].isHittable {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.45)).tap()
+        _ = app.buttons["退出播放"].waitForExistence(timeout: 2)
     }
 }

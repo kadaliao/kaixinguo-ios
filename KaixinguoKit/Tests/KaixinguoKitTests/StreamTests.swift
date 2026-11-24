@@ -118,6 +118,46 @@ func playsOnline() async throws {
     #expect(model.player.av.currentTime().seconds > 2)
     #expect(model.history.get(card.id)?.episode == 1)
 
+    // The next episode's start is read ahead, decrypted, and it plays
+    // from there.
+    for _ in 0..<100 where model.player.preloaded == nil {
+        model.player.preloadNext()
+        try await Task.sleep(for: .milliseconds(100))
+    }
+    let ahead = try #require(model.player.preloaded, "the next episode wasn't read ahead")
+    for _ in 0..<200 where await ahead.loader.preloaded() < 1 << 20 {
+        try await Task.sleep(for: .milliseconds(100))
+    }
+    #expect(await ahead.loader.preloaded() >= 1 << 20)
+    model.player.step(1)
+    for _ in 0..<300 {
+        if case .failed = model.player.state { break }
+        if model.player.number == 2, model.player.state == .playing, model.player.av.currentTime().seconds > 1 { break }
+        try await Task.sleep(for: .milliseconds(100))
+    }
+    #expect(model.player.number == 2 && model.player.state == .playing, "\(model.player.state)")
+    #expect(model.player.loader === ahead.loader)
+
+    // Over HTTP, decrypted, as AirPlay fetches it: another player plays it
+    // from the server and seeks in it.
+    let server = StreamServer()
+    defer { server.stop() }
+    let url = try await server.url(for: ahead.loader, host: "127.0.0.1")
+    let remote = AVPlayer(url: url)
+    remote.isMuted = true
+    remote.play()
+    for _ in 0..<200 where remote.currentTime().seconds < 2 {
+        try await Task.sleep(for: .milliseconds(100))
+    }
+    #expect(remote.currentTime().seconds >= 2, "\(String(describing: remote.currentItem?.error))")
+    let length = try await remote.currentItem!.asset.load(.duration).seconds
+    await remote.seek(to: CMTime(seconds: length - 10, preferredTimescale: 600))
+    for _ in 0..<200 where remote.currentTime().seconds < length - 9 {
+        try await Task.sleep(for: .milliseconds(100))
+    }
+    #expect(remote.currentTime().seconds >= length - 9)
+    remote.pause()
+
     // The episode's danmaku read to the last page; an episode may have none.
     let reel = try #require(model.player.danmaku())
     for _ in 0..<300 where reel.loading {

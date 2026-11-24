@@ -38,8 +38,10 @@ flowchart LR
 | 文件 | 负责什么 | 对应 macOS 版 |
 | --- | --- | --- |
 | `KaixinguoKit/Sources/CENC/CENC.swift` | 把 CENC 加密的 MP4 按字节区间还原成明文 | `internal/cenc` |
-| `KaixinguoKit/…/StreamLoader.swift` | AVFoundation 的资源加载器：按区间下载、解密、交给播放器 | `proxy.go` |
-| `KaixinguoKit/…/Player.swift` | 播放流程：解析播放地址、预取下一集、选流、连播、记录进度 | `play.go` |
+| `KaixinguoKit/…/StreamLoader.swift` | AVFoundation 的资源加载器：按区间下载、解密、交给播放器；预读文件开头 | `proxy.go` |
+| `KaixinguoKit/…/StreamServer.swift` | 投屏用的本机 HTTP 服务：把 `StreamLoader` 解密后的区间交给 AirPlay 设备 | `proxy.go` |
+| `KaixinguoKit/…/AudioBoost.swift` | 音量超过系统最大时，在播放项的音频 tap 上加增益 | 无 |
+| `KaixinguoKit/…/Player.swift` | 播放流程：解析播放地址、预取和预读下一集、选流、连播、记录进度、投屏时换播放项 | `play.go` |
 | `KaixinguoKit/…/Danmaku.swift` | 弹幕：读一集的弹幕、分配轨道、算出每条此刻的位置 | 无 |
 | `KaixinguoKit/…/AppModel.swift` | 全部状态、各页的 fetcher、热搜、首页缓存 | `main.go`、`data.go` |
 | `KaixinguoKit/…/Feed.swift` | 分页加载的列表，去重、自动重试、下拉刷新 | `data.go` 的 `feed` |
@@ -59,7 +61,7 @@ flowchart LR
 | `Shared/SharedViews.swift` | 海报、封面、列表还空着时的加载和出错状态、榜单名次、弹幕层，以及倍速和定时关闭的文字；iOS 和 tvOS 共用 | `view.go` |
 | `Kaixinguo/Views/CatalogViews.swift` | 推荐、排行榜、新剧上线、搜索、热搜、我的 | `view.go` |
 | `Kaixinguo/Views/SeriesView.swift` | 剧集详情 | `view_series.go` |
-| `Kaixinguo/Views/PlayerScreen.swift` | 播放页（顶栏、进度条、手势、播放页里的搜索）、选集面板、画中画 | `view_player.go` |
+| `Kaixinguo/Views/PlayerScreen.swift` | 播放页（顶栏、进度条、控件的隐去、手势、亮度和音量、投屏按钮、播放页里的搜索）、选集面板、画中画 | `view_player.go` |
 | `KaixinguoTV/KaixinguoTVApp.swift` | Apple TV 版的入口、顶部的标签页和各自的导航栈，以及盖在上面的播放器 | 无 |
 | `KaixinguoTV/TVCatalogViews.swift` | Apple TV 的推荐、排行榜、新剧、搜索和「我的」：海报墙、横排的货架、选榜单和日期的按钮 | 无 |
 | `KaixinguoTV/TVSeriesView.swift` | Apple TV 的剧集详情、选季和选集 | 无 |
@@ -95,7 +97,37 @@ flowchart LR
 
 `CENC` 是 macOS 版 `internal/cenc` 的逐行移植，关键同样是**解密不改变任何字节的位置**：样本原地解密，标记加密的盒子改名成同样长度的明文盒子（`encv` → `hvc1`、`sinf` → `free` 等）。所以明文文件的任意区间就是密文文件同一区间解密后的结果，播放器可以随意拖动。它的输出和 Go 版逐字节一致，见 `CENCTests` 里的 `decryptsRealEpisode`。
 
-和 macOS 版用本机 HTTP 代理 + WebView 相比，资源加载器不开端口，播放器是系统的 `AVPlayerViewController`，画中画和锁屏控制都是现成的；它自带的控件藏了起来，播放页用自己的顶栏、进度条和手势（点按暂停、上下滑换集、长按倍速，都挂在它的视图上）。代价是 AirPlay 投屏拿不到解密后的视频，所以 `allowsExternalPlayback` 是关着的。
+和 macOS 版用本机 HTTP 代理 + WebView 相比，资源加载器不开端口，播放器是系统的 `AVPlayerViewController`，画中画和锁屏控制都是现成的；它自带的控件藏了起来，播放页用自己的顶栏、进度条和手势（见「播放页」）。代价是 AirPlay 设备拿不到资源加载器里的视频，投屏要另走 HTTP，见「投屏」。
+
+### 预读下一集
+
+`Player.resolve` 在一集开始播放时就取下一集的播放模型（地址和密钥）。这一集正常播放满 3 个 3 秒的周期（约 9 秒，按 `timeControlStatus == .playing` 计，缓冲和暂停不算）后，`preloadNext` 为下一集建好 `StreamLoader` 并调用 `preload`：读文件头、算好解密布局，再把开头约 20 秒（按码率算，2～8 MB）下载下来解密，留在内存里。
+
+- 加载器把文件头和预读的部分记在 `prefix` 里（明文，从第 0 字节起）。之后不论是 AVFoundation 还是 HTTP 来要区间，落在 `prefix` 里的部分直接从内存给，其余再去 CDN 取。
+- 切到下一集时，`makeItem` 看预读的是不是这一集、这一路流（地址一样），是就直接用它，不是就丢掉。下一季的第一集只有在它的剧集页已经加载好时才预读。
+- 预读失败不算数：加载器记下的失败只来自播放时的请求，播放时会重新试。
+
+### 投屏
+
+AirPlay 视频投屏时，Apple TV 自己去取播放项的地址，而 `kaixinguo-stream://` 只有本机的资源加载器认得。所以 `Player` 盯着音频路由（`AVAudioSession.routeChangeNotification`）：
+
+1. 路由里出现 AirPlay 输出时，`casting` 变真，打开 `allowsExternalPlayback`，用 `StreamServer` 给当前的加载器换一个 `http://<本机 Wi-Fi IPv4>:<端口>/episode/<随机 ID>.mp4` 的地址，在同一秒换上新的播放项（`replay`）。之后的集也都用 HTTP 地址。
+2. 路由回到本机时关掉 `allowsExternalPlayback`、停掉服务，同样在同一秒换回资源加载器的播放项。
+3. `isExternalPlaybackActive` 为真时，播放页用「正在投屏」盖住画面，不画弹幕。
+
+`StreamServer` 用 Network.framework 监听系统分配的端口，只在投屏时开着。它只认 `GET` 和 `HEAD`、`/episode/<ID>.mp4`（ID 是加载器自己的随机 UUID，不在登记里的一律 404），支持 `Range`（`a-b`、`a-`、`-n`，多段只取第一段），每个响应都 `Connection: close`。区间交给加载器去 CDN 取、边收边解密边发；对方没取走的超过 4 MB 就暂停那个下载任务，降到 1 MB 以下再接着下（`HTTPSink`），对方断开时取消下载。锁屏以后服务还要接着响应，靠的是 `audio` 后台模式让 App 继续运行。
+
+本地网络权限：电视连进来要经过系统的本地网络授权，`NSLocalNetworkUsageDescription` 写明了投屏。只支持 AirPlay，DLNA 需要组播权限（`com.apple.developer.networking.multicast`），要向 Apple 单独申请，没有做。
+
+`swift test` 里的 `servesOverHTTP` 在 Mac 上起一个服务，验证区间、整文件、HEAD、416、404，以及预读过的部分不再向 CDN 要；联网的 `playsOnline` 让另一个 AVPlayer 经这个服务播放真实的加密剧集并拖到末尾。
+
+### 播放页
+
+播放页的手势都挂在 `AVPlayerViewController` 的视图上（`PlayerHost`）：
+
+- **控件的隐去**：顶栏、进度条、iPhone 竖屏底部的「选集」、状态栏和 Home 条，在视频播放着、4 秒没被碰过时一起淡出（`ChromeTimer`）；只改透明度和是否接收触摸，不改布局，视频不会跳。点画面先让它们回来，显示着时点画面才暂停。暂停、出错、开着选集面板或搜索、按住倍速、调亮度音量、拖进度条、选 AirPlay 设备时一直显示；VoiceOver 开着时不隐去。触摸是在它落下的地方记的（`PlayerHUD.poke`：画面的手势、进度条、旋转按钮、菜单里的选择、AirPlay 选单）。没有用盯住整个屏幕的手势识别器：它会拖住菜单里的选项和画面自己的点按，偶尔点了没反应。菜单开着超过 4 秒，控件会在菜单后面淡出，菜单照常能用，选了以后控件回来。
+- **上下滑**：按手指落下的位置分三份。中间换集（视频跟着手指走，够远或够快就换）；左边调屏幕亮度（`UIScreen.brightness`，第一次改之前记下原值，离开播放页或退到后台时还原）；右边调音量，滑过视频高度的七成从 0 到满。
+- **音量**：系统音量用藏在播放器视图里的 `MPVolumeView` 的滑块来设，它在视图里时系统不再弹出自己的音量框。到 100% 以后系统音量停在最大，再往上由 `Player.setBoost` 给播放项装上 `AudioBoost` 的音频 tap，样本乘上增益（最多 1.5 倍），超过 0.8 的部分用 tanh 软削波收到 ±1 以内，避免爆音。增益只在本机有效：投屏时音量最多到 100%。按音量键把系统音量调低时，增益回到 1。
 
 ### 画中画
 
@@ -201,7 +233,7 @@ CENC_SAMPLE=enc.mp4 CENC_KEY=<密钥> CENC_CLEAR=clear.mp4 swift test --filter "
 KX_ONLINE=1 swift test --filter playsOnline
 ```
 
-**界面冒烟测试**（`KaixinguoUITests`）在模拟器里像用户一样操作：打开推荐的第一部剧、收藏、在「我的」里找到它、播放、下一集、退出后看到「继续看第 2 集」；播放几秒暂停、关掉 App 再打开，回到同一集的同一秒，退出播放页后是那部剧的详情页。它用真实接口，需要网络。Debug 构建启动时认 `-KXFresh YES`，像第一次打开那样不恢复上次的地方，测试用它保证每次从推荐页开始。
+**界面冒烟测试**（`KaixinguoUITests`）在模拟器里像用户一样操作：打开推荐的第一部剧、收藏、在「我的」里找到它、播放、下一集、控件隐去后点一下回来、左右两边上下滑出现亮度和音量、退出后看到「继续看第 2 集」；播放几秒暂停、关掉 App 再打开，回到同一集的同一秒，退出播放页后是那部剧的详情页。它用真实接口，需要网络。Debug 构建启动时认 `-KXFresh YES`，像第一次打开那样不恢复上次的地方，测试用它保证每次从推荐页开始；`-KXChromeFor 8` 让播放页的控件 8 秒才隐去，测试来得及点到。
 
 **Apple TV 冒烟测试**（`KaixinguoTVUITests`）用虚拟遥控器（`XCUIRemote`）走一遍：打开推荐的第一部剧、收藏、播放，检查控制栏里有倍速、定时关闭和弹幕开关，下滑到「选集」播下一集，退出后焦点落在「继续看第 n 集」上，再依次切到排行榜、新剧、我的和搜索。每一步都截图存进测试结果，`xcrun xcresulttool export attachments` 能导出来看：
 
@@ -220,4 +252,4 @@ scripts/shoot.sh "iPhone Air" kaixinguo://series/<剧集 ID> /tmp/series.png
 
 - 不支持分段（DASH/HLS）和音视频分离的流。
 - 需要登录才能看的集数不能播放，应用不提供登录。
-- AirPlay 只能屏幕镜像，不能把视频投给 Apple TV 单独播放。
+- 投屏只支持 AirPlay，不支持 DLNA；手机和电视要在同一个 Wi-Fi 下，投屏时开心果要一直开着。

@@ -17,6 +17,8 @@ public final class StreamLoader: NSObject, @unchecked Sendable {
 
     /// The URL the asset plays.
     public let url: URL
+    /// What tells this loader's file from others, in its URLs.
+    let id = UUID().uuidString
     let sources: [URL]
     let key: [UInt8]?
     let queue = DispatchQueue(label: "kaixinguo.stream")
@@ -27,14 +29,25 @@ public final class StreamLoader: NSObject, @unchecked Sendable {
     private var file: (size: Int64, layout: Layout?)?
     private var failure: Error?
     private var preparing = false
-    private var waiting: [AVAssetResourceLoadingRequest] = []
+    private var waiting: [Waiter] = []
     private var transfers: [Int: Transfer] = [:] // by task identifier
     private var good = 0 // the source that answered
     private var invalidated = false
+    /// The file from its first byte, decrypted, as far as it has been read
+    /// ahead: the head read to learn the file, and what `preload` adds.
+    private var prefix = Data()
+    private var preloading = false
 
-    /// A range a loading request wants, on its way from the CDN.
+    /// What waits for the file to be learned; `soft` for a read ahead,
+    /// whose failure doesn't stop the episode trying again as it plays.
+    private struct Waiter {
+        let soft: Bool
+        let then: (Result<Int64, Error>) -> Void
+    }
+
+    /// A range a sink wants, on its way from the CDN.
     private final class Transfer {
-        let request: AVAssetResourceLoadingRequest
+        let request: RangeSink
         let task: URLSessionDataTask
         let source: Int
         var next: Int64 // where the next byte that arrives belongs
@@ -42,7 +55,7 @@ public final class StreamLoader: NSObject, @unchecked Sendable {
         var skip: Int64 = 0 // bytes to drop from a CDN that sent the whole file
         let tries: Int // downloads of this range that broke off before
 
-        init(request: AVAssetResourceLoadingRequest, task: URLSessionDataTask, source: Int, start: Int64, end: Int64,
+        init(request: RangeSink, task: URLSessionDataTask, source: Int, start: Int64, end: Int64,
              tries: Int) {
             self.request = request
             self.task = task
@@ -62,7 +75,7 @@ public final class StreamLoader: NSObject, @unchecked Sendable {
     init(sources: [URL], key: [UInt8]?, configuration config: URLSessionConfiguration) {
         self.sources = sources
         self.key = key
-        url = URL(string: "\(Self.scheme)://episode/\(UUID().uuidString).mp4")!
+        url = URL(string: "\(Self.scheme)://episode/\(id).mp4")!
         config.timeoutIntervalForRequest = 20
         config.httpMaximumConnectionsPerHost = 6
         headSession = URLSession(configuration: config)
@@ -89,6 +102,7 @@ public final class StreamLoader: NSObject, @unchecked Sendable {
                 t.task.cancel()
             }
             transfers = [:]
+            prefix = Data()
             session.invalidateAndCancel()
             headSession.invalidateAndCancel()
         }
@@ -96,14 +110,26 @@ public final class StreamLoader: NSObject, @unchecked Sendable {
 
     // MARK: - Learning the file
 
+    /// Calls `then` on the queue with the file's size, once it is known.
+    private func withFile(soft: Bool = false, _ then: @escaping (Result<Int64, Error>) -> Void) {
+        if let file {
+            then(.success(file.size))
+        } else if let failure {
+            then(.failure(failure))
+        } else {
+            waiting.append(Waiter(soft: soft, then: then))
+            prepare()
+        }
+    }
+
     /// Learns the file's size and, for an encrypted one, its layout, then
-    /// serves the requests that waited for them.
+    /// serves what waited for them.
     private func prepare() {
         guard !preparing else { return }
         preparing = true
         let sources = sources, key = key
         Task {
-            var outcome: Result<(Int64, Layout?, Int), Error> = .failure(AppError("没有视频地址"))
+            var outcome: Result<(Int64, Layout?, Int, [UInt8]), Error> = .failure(AppError("没有视频地址"))
             for (i, source) in sources.enumerated() {
                 do {
                     let (head, total) = try await fetch(source, 0, 64 << 10 - 1)
@@ -116,7 +142,7 @@ public final class StreamLoader: NSObject, @unchecked Sendable {
                             return try await fetch(source, off, off + n - 1).0
                         }
                     }
-                    outcome = .success((total, layout, i))
+                    outcome = .success((total, layout, i, head))
                     break
                 } catch {
                     debugLog("stream: \(source.host() ?? ""): \(error)")
@@ -125,24 +151,73 @@ public final class StreamLoader: NSObject, @unchecked Sendable {
             }
             queue.async { [self, outcome] in
                 preparing = false
+                let ws = waiting
+                waiting = []
                 switch outcome {
-                case .success(let (size, layout, i)):
+                case .success(let (size, layout, i, head)):
                     file = (size, layout)
                     good = i
-                    let reqs = waiting
-                    waiting = []
-                    for r in reqs where !r.isCancelled {
-                        serve(r)
+                    var clear = Data(head)
+                    layout?.decrypt(&clear, at: 0)
+                    if prefix.isEmpty {
+                        prefix = clear
+                    }
+                    for w in ws {
+                        w.then(.success(size))
                     }
                 case .failure(let error):
-                    failure = error
-                    let reqs = waiting
-                    waiting = []
-                    for r in reqs where !r.isCancelled {
-                        r.finishLoading(with: error)
+                    // A read ahead that failed leaves the episode to try
+                    // again as it plays.
+                    if ws.contains(where: { !$0.soft }) {
+                        failure = error
+                    }
+                    for w in ws {
+                        w.then(.failure(error))
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Reading ahead
+
+    /// Reads the file's first `bytes` ahead, decrypted, so the episode
+    /// starts at once when it plays: what AVFoundation or a device on the
+    /// network asks for of them is served from memory.
+    public func preload(_ bytes: Int64) {
+        queue.async { [self] in
+            guard !invalidated, !preloading else { return }
+            preloading = true
+            withFile(soft: true) { [self] result in
+                guard case .success(let size) = result, !invalidated else {
+                    preloading = false
+                    return
+                }
+                let from = Int64(prefix.count), to = min(size, bytes)
+                guard from < to else {
+                    preloading = false
+                    return
+                }
+                let source = sources[good]
+                Task {
+                    let got = try? await fetch(source, from, to - 1).0
+                    queue.async { [self] in
+                        preloading = false
+                        guard let got, !invalidated, Int64(prefix.count) == from else { return }
+                        var clear = Data(got)
+                        file?.layout?.decrypt(&clear, at: from)
+                        prefix.append(clear)
+                        debugLog("stream: read ahead \(prefix.count) bytes")
+                    }
+                }
+            }
+        }
+    }
+
+    /// How many bytes from the start are read ahead; for tests.
+    func preloaded() async -> Int {
+        await withCheckedContinuation { c in
+            queue.async { [self] in c.resume(returning: prefix.count) }
         }
     }
 
@@ -167,6 +242,7 @@ public final class StreamLoader: NSObject, @unchecked Sendable {
 
     // MARK: - Serving ranges
 
+    /// Serves what a loading request of AVFoundation's wants.
     private func serve(_ req: AVAssetResourceLoadingRequest) {
         guard let file else { return }
         guard !invalidated else {
@@ -185,15 +261,40 @@ public final class StreamLoader: NSObject, @unchecked Sendable {
         let start = data.currentOffset
         let end = data.requestsAllDataToEndOfResource
             ? file.size : min(file.size, data.requestedOffset + Int64(data.requestedLength))
-        if start >= end {
-            req.finishLoading()
-            return
-        }
-        transfer(req, from: start, to: end, source: good)
+        read(LoadingSink(req), from: start, to: end)
     }
 
-    private func transfer(_ req: AVAssetResourceLoadingRequest, from start: Int64, to end: Int64, source: Int,
-                          tries: Int = 0) {
+    /// Sends bytes start..<end of the file to `sink`: from memory as far as
+    /// they were read ahead, the rest from the CDN.
+    private func read(_ sink: RangeSink, from start: Int64, to end: Int64) {
+        guard !invalidated else {
+            sink.finish(CancellationError())
+            return
+        }
+        var start = start
+        if start < Int64(prefix.count), start < end {
+            let upto = min(end, Int64(prefix.count))
+            let more = sink.respond(prefix.subdata(in: Int(start)..<Int(upto)))
+            start = upto
+            if start < end && !more {
+                sink.whenReady { [self, start] in
+                    queue.async { [self] in
+                        if !sink.isCancelled {
+                            read(sink, from: start, to: end)
+                        }
+                    }
+                }
+                return
+            }
+        }
+        if start >= end {
+            sink.finish(nil)
+            return
+        }
+        transfer(sink, from: start, to: end, source: good)
+    }
+
+    private func transfer(_ req: RangeSink, from start: Int64, to end: Int64, source: Int, tries: Int = 0) {
         var r = URLRequest(url: sources[source])
         r.setValue("bytes=\(start)-\(end - 1)", forHTTPHeaderField: "Range")
         let task = session.dataTask(with: r)
@@ -201,29 +302,113 @@ public final class StreamLoader: NSObject, @unchecked Sendable {
                                                      tries: tries)
         task.resume()
     }
+
+    /// Stops what goes to `sink`, which no longer wants it.
+    private func cancel(_ sink: RangeSink) {
+        for (id, t) in transfers where t.request === sink || (t.request as? LoadingSink)?.matches(sink) == true {
+            t.task.cancel()
+            transfers[id] = nil
+        }
+    }
+
+    // MARK: - Over HTTP
+
+    /// Learns the file's size, on the queue, for a response over HTTP.
+    func size(_ then: @escaping @Sendable (Result<Int64, Error>) -> Void) {
+        queue.async { [self] in
+            guard !invalidated else {
+                then(.failure(CancellationError()))
+                return
+            }
+            withFile { then($0) }
+        }
+    }
+
+    /// Sends bytes start..<end of the file to a response over HTTP.
+    func send(_ sink: RangeSink, from start: Int64, to end: Int64) {
+        queue.async { [self] in
+            withFile { [self] result in
+                switch result {
+                case .success:
+                    if !sink.isCancelled {
+                        read(sink, from: start, to: end)
+                    }
+                case .failure(let error):
+                    sink.finish(error)
+                }
+            }
+        }
+    }
+
+    /// Stops sending to a response over HTTP, whose client went away.
+    func stop(_ sink: RangeSink) {
+        queue.async { [self] in cancel(sink) }
+    }
+}
+
+/// RangeSink is where a range of the file goes, as it arrives: a loading
+/// request of AVFoundation's, or a response of `StreamServer`'s. The
+/// loader calls it on its queue.
+protocol RangeSink: AnyObject, Sendable {
+    var isCancelled: Bool { get }
+    /// Takes the next bytes; false when it holds enough not yet sent on,
+    /// and the loader should wait for `whenReady` before sending more.
+    func respond(_ data: Data) -> Bool
+    /// Calls `ready`, on any queue, once it takes more again.
+    func whenReady(_ ready: @escaping @Sendable () -> Void)
+    func finish(_ error: Error?)
+}
+
+/// LoadingSink passes a range to the loading request that wants it.
+private final class LoadingSink: RangeSink, @unchecked Sendable { // used on the loader's queue
+    let req: AVAssetResourceLoadingRequest
+
+    init(_ req: AVAssetResourceLoadingRequest) {
+        self.req = req
+    }
+
+    var isCancelled: Bool { req.isCancelled }
+
+    func respond(_ data: Data) -> Bool {
+        req.dataRequest?.respond(with: data)
+        return true
+    }
+
+    func whenReady(_ ready: @escaping @Sendable () -> Void) {
+        ready()
+    }
+
+    func finish(_ error: Error?) {
+        if let error {
+            req.finishLoading(with: error)
+        } else {
+            req.finishLoading()
+        }
+    }
+
+    func matches(_ other: RangeSink) -> Bool {
+        (other as? LoadingSink)?.req === req
+    }
 }
 
 extension StreamLoader: AVAssetResourceLoaderDelegate {
     public func resourceLoader(_ resourceLoader: AVAssetResourceLoader,
                                shouldWaitForLoadingOfRequestedResource req: AVAssetResourceLoadingRequest) -> Bool {
         guard req.request.url?.scheme == Self.scheme, !invalidated else { return false }
-        if file != nil {
-            serve(req)
-        } else if let failure {
-            req.finishLoading(with: failure)
-        } else {
-            waiting.append(req)
-            prepare()
+        withFile { [self] result in
+            guard !req.isCancelled else { return }
+            switch result {
+            case .success:
+                serve(req)
+            case .failure(let error):
+                req.finishLoading(with: error)
+            }
         }
         return true
     }
 
     public func resourceLoader(_ resourceLoader: AVAssetResourceLoader, didCancel req: AVAssetResourceLoadingRequest) {
-        waiting.removeAll { $0 === req }
-        for (id, t) in transfers where t.request === req {
-            t.task.cancel()
-            transfers[id] = nil
-        }
+        cancel(LoadingSink(req))
     }
 }
 
@@ -262,20 +447,24 @@ extension StreamLoader: URLSessionDataDelegate {
         chunk = Data(chunk.prefix(Int(t.end - t.next)))
         guard !chunk.isEmpty else { return }
         file?.layout?.decrypt(&chunk, at: t.next)
-        t.request.dataRequest?.respond(with: chunk)
+        let more = t.request.respond(chunk)
         t.next += Int64(chunk.count)
         good = t.source
         if t.next >= t.end {
             transfers[dataTask.taskIdentifier] = nil
             dataTask.cancel() // a CDN that sent the whole file sends more
-            t.request.finishLoading()
+            t.request.finish(nil)
+        } else if !more {
+            // Holds off the CDN until the sink has sent on what it holds.
+            dataTask.suspend()
+            t.request.whenReady { [weak dataTask] in dataTask?.resume() }
         }
     }
 
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let t = transfers.removeValue(forKey: task.taskIdentifier), !t.request.isCancelled else { return }
         if t.next >= t.end {
-            t.request.finishLoading()
+            t.request.finish(nil)
             return
         }
         // The download broke off, or never started: go on from where it
@@ -285,7 +474,7 @@ extension StreamLoader: URLSessionDataDelegate {
             transfer(t.request, from: t.next, to: t.end, source: other, tries: t.tries + 1)
             return
         }
-        t.request.finishLoading(with: error ?? AppError("视频下载中断"))
+        t.request.finish(error ?? AppError("视频下载中断"))
     }
 }
 

@@ -37,7 +37,7 @@
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>连接你在局域网里部署的签名服务。</string>
+	<string>投屏时让电视从这台设备取视频，以及连接你在局域网里部署的签名服务。</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
