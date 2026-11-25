@@ -2,6 +2,12 @@
 
 这里记录每个版本用户能感知到的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.2] - 2026-11-25
+
+### 修复
+
+- 红果服务端从 11 月 25 日起又改了播放接口的校验，0.9.1 换的那条通道也取不到地址，所有剧集又打不开了（提示「这一集暂时无法匿名播放」），配了签名服务也一样。补上服务端现在要求的签名字段后已恢复，签名服务也重新可用
+
 ## [0.9.1] - 2026-11-25
 
 ### 修复
@@ -110,7 +116,8 @@
 - AirPlay 只能屏幕镜像
 - 第一次启动要注册匿名设备，网络慢时列表可能要等十几秒才出来；之后启动会先显示缓存
 
-[未发布]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.9.1...HEAD
+[未发布]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/kadaliao/kaixinguo-ios/compare/v0.7.0...v0.8.0
