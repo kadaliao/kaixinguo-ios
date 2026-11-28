@@ -17,18 +17,22 @@ struct PlayerScreen: View {
     @State private var showEpisodes = false
     @State private var searching = false
     @State private var resumeAfterSearch = false
+    @AppStorage(VideoLayout.key) private var layout = VideoLayout.fit
     private let hud = PlayerHost.shared.hud
 
     var body: some View {
         let landscape = vsize == .compact // a phone on its side: the video alone
         let panel = !landscape && hsize == .regular
+        let bar = !landscape && !panel // the episodes button, on iPhone upright
         ZStack {
             // One layout for all three, so the video keeps its place, and
             // its player, as the device turns.
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
-                    VideoArea(landscape: landscape, search: openSearch)
-                    if !landscape && !panel {
+                    VideoArea(landscape: landscape, layout: layout,
+                              episodes: bar && layout == .fill ? { showEpisodes = true } : nil,
+                              search: openSearch)
+                    if bar && layout == .fit {
                         EpisodeBar { showEpisodes = true }
                             .chrome(hud.chrome)
                             .overlay {
@@ -101,19 +105,25 @@ struct PlayerScreen: View {
 
 /// VideoArea is the video and what lies over it: what plays and how fast at
 /// the top, how far it has got at the bottom, and what a press, a pause or a
-/// failure shows. The video goes up under the status bar, and on a phone on
-/// its side to every edge.
+/// failure shows. The video goes up under the status bar, down under the
+/// home indicator too as it fills the screen, and on a phone on its side to
+/// every edge.
 private struct VideoArea: View {
     var landscape: Bool
+    var layout: VideoLayout
+    /// Opens the episodes from a button over the bottom of the video, as it
+    /// fills the screen on iPhone upright; nil where the button is under the
+    /// video, or the episodes beside it.
+    var episodes: (() -> Void)?
     var search: () -> Void
     @Environment(AppModel.self) private var model
     private let hud = PlayerHost.shared.hud
 
     var body: some View {
         ZStack {
-            PlayerControllerView(player: model.player)
+            PlayerControllerView(player: model.player, layout: layout)
                 .offset(y: hud.offset)
-                .ignoresSafeArea(edges: landscape ? .all : .top)
+                .ignoresSafeArea(edges: landscape ? .all : layout == .fill ? .vertical : .top)
             if model.player.external {
                 CastMark()
             } else {
@@ -132,6 +142,10 @@ private struct VideoArea: View {
                 Spacer(minLength: 0)
                 ProgressBar()
                     .chrome(hud.chrome)
+                if let episodes {
+                    EpisodeBar(over: true, open: episodes)
+                        .chrome(hud.chrome)
+                }
             }
         }
     }
@@ -406,12 +420,14 @@ private struct SpeedPicker: View {
     }
 }
 
-/// MoreMenu sets how the episode plays: its speed, its definition, when to
-/// stop and whether danmaku show; and saves the series, or opens its page.
+/// MoreMenu sets how the episode plays: its speed, its definition, how it
+/// takes the screen, when to stop and whether danmaku show; and saves the
+/// series, or opens its page.
 private struct MoreMenu: View {
     @Environment(AppModel.self) private var model
     @Environment(Router.self) private var router
     @AppStorage(danmakuKey) private var danmaku = true
+    @AppStorage(VideoLayout.key) private var layout = VideoLayout.fit
 
     var body: some View {
         let player = model.player
@@ -436,6 +452,16 @@ private struct MoreMenu: View {
                     Label("清晰度", systemImage: "sparkles.tv")
                     Text(verbatim: "\(player.quality)P")
                 }
+            }
+            Menu {
+                Picker("画面布局", selection: $layout) {
+                    ForEach(VideoLayout.allCases, id: \.self) { l in
+                        Text(l.name).tag(l)
+                    }
+                }
+            } label: {
+                Label("画面布局", systemImage: "aspectratio")
+                Text(layout.name)
             }
             Menu {
                 Picker("定时关闭", selection: Binding(get: { player.sleep }, set: {
@@ -473,6 +499,27 @@ private struct MoreMenu: View {
         }
         .accessibilityLabel("更多")
         .onChange(of: danmaku) { PlayerHost.shared.hud.poke() }
+        .onChange(of: layout) { PlayerHost.shared.hud.poke() }
+    }
+}
+
+/// VideoLayout is how the video takes its place, as picked in the more
+/// menu: the whole of it, black at the edges where its shape and the
+/// screen's differ; or the place filled, the video's own edges cut off
+/// instead. Filling, it also goes on under the home indicator, and on
+/// iPhone upright under the episodes button, which then sits over it.
+private enum VideoLayout: String, CaseIterable {
+    case fit, fill
+
+    /// Where the pick is kept, for the episodes after and the next time the
+    /// app opens: the whole of the video until one is made.
+    static let key = "videoLayout"
+
+    var name: String {
+        switch self {
+        case .fit: "完整显示"
+        case .fill: "填充屏幕"
+        }
     }
 }
 
@@ -776,8 +823,10 @@ private struct ChromeKey: Hashable {
 
 // MARK: - Under and beside the video
 
-/// EpisodeBar opens the episodes, under the video on iPhone.
+/// EpisodeBar opens the episodes, under the video on iPhone; or over its
+/// bottom, as it fills the screen, where the video shows through it.
 private struct EpisodeBar: View {
+    var over = false
     var open: () -> Void
     @Environment(AppModel.self) private var model
 
@@ -796,7 +845,8 @@ private struct EpisodeBar: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 16)
             .frame(height: 44)
-            .background(Color(white: 0.15), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(over ? Color.black.opacity(0.45) : Color(white: 0.15),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1022,12 +1072,17 @@ private struct PlayerSearch: View {
 /// what the lock screen shows.
 private struct PlayerControllerView: UIViewControllerRepresentable {
     let player: Player
+    let layout: VideoLayout
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         PlayerHost.shared.controller(for: player)
     }
 
-    func updateUIViewController(_ vc: AVPlayerViewController, context: Context) {}
+    /// Fits the video to the layout picked: on the one controller there is,
+    /// so the pick holds from one episode to the next.
+    func updateUIViewController(_ vc: AVPlayerViewController, context: Context) {
+        vc.videoGravity = layout == .fill ? .resizeAspectFill : .resizeAspect
+    }
 }
 
 /// PlayerHost keeps the one player view controller there is, so picture
