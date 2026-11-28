@@ -110,7 +110,8 @@ final class SmokeTests: XCTestCase {
     }
 
     /// Quitting and opening the app again comes back where it was: the
-    /// episode paused at the second it got to, and the series page under it.
+    /// episode paused at the second it got to, as the layout picked shows
+    /// it, and the series page under it.
     @MainActor func testComesBackWhereItWas() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-KXFresh", "YES"]
@@ -135,6 +136,15 @@ final class SmokeTests: XCTestCase {
         let at = try XCTUnwrap(progress.value as? String)
         XCTAssertFalse(at.hasPrefix("0:00"), at)
 
+        // The more menu has the video fill the screen.
+        app.buttons["更多"].tap()
+        app.buttons["aspectratio"].tap()
+        app.buttons["填充屏幕"].tap()
+        XCTAssertTrue(app.buttons["退出播放"].waitForExistence(timeout: 3))
+        let filled = XCTAttachment(screenshot: app.screenshot())
+        filled.lifetime = .keepAlways
+        add(filled)
+
         app.terminate()
         app.launchArguments = []
         app.launch()
@@ -144,6 +154,15 @@ final class SmokeTests: XCTestCase {
         let back = NSPredicate(format: "value == %@", at)
         wait(for: [expectation(for: back, evaluatedWith: progress)], timeout: 20)
         XCTAssertTrue(app.images["已暂停"].exists, "it played on by itself")
+
+        // It still fills the screen; and goes back to the whole video, for
+        // the runs after.
+        app.buttons["更多"].tap()
+        let layout = app.buttons["aspectratio"]
+        XCTAssertTrue(layout.waitForExistence(timeout: 3))
+        XCTAssertTrue(layout.label.contains("填充屏幕"), layout.label)
+        layout.tap()
+        app.buttons["完整显示"].tap()
 
         app.buttons["退出播放"].tap()
         XCTAssertTrue(app.staticTexts["选集"].waitForExistence(timeout: 10), "the series page did not come back")
